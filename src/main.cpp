@@ -1,9 +1,14 @@
 #include <SDL2/SDL.h>
+#include <SDL2/SDL_opengl.h>
 #include <cstdint>
+#include <thread>
 #include <mutex>
 #include "main_test.h"
 
-#include "../extern/opl_dosbox/opl.h"
+#include "extern/opl_dosbox/opl.h"
+#include "extern/imgui/imgui.h"
+#include "extern/imgui/examples/imgui_impl_sdl.h"
+#include "extern/imgui/examples/imgui_impl_opengl2.h"
 
 #define AMPLITUDE       28000
 #define SAMPLE_RATE     44100
@@ -13,32 +18,10 @@
 static std::mutex audio_mutex;
 static OPLChipClass opl(SAMPLE_RATE);
 
-/*
+static SDL_Window *window = nullptr;
+static SDL_GLContext gl_context = nullptr;
 
-struct Synth {
-    size_t frame;
-};
-
-static void audio_callback(void *data, uint8_t *raw_buf, int bytes)
-{
-    Synth *synth = (Synth *)data;
-
-    int16_t *buf = (int16_t *)raw_buf;
-    int length = bytes / (sizeof *buf);
-
-    for(int i = 0; i < length; ++i, synth->frame++) {
-        float time = (float)synth->frame / (float)SAMPLE_RATE;
-
-        float generator = sinf(2.0f * M_PI * 220.0f * time) * 0.35f;
-        float modulator = sinf(4.0f * generator + 0.5f) * 0.35f;
-        float mod3 = sinf(8.0f * modulator + 0.25f) * 0.75f;
-        float mod4 = sinf(2.0f * mod3 + sinf(modulator * 0.5f) * 0.5f);
-        float out = mod4;
-
-        buf[i] = (int16_t)(AMPLITUDE * out);
-    }
-}
-*/
+static std::thread play_thread;
 
 void adlib_out(unsigned short addr, unsigned char val)
 {
@@ -55,51 +38,62 @@ static void audio_callback(void *data, uint8_t *raw_buf, int bytes)
     opl->adlib_getsample((Bit16s *)raw_buf, bytes / 2);
 }
 
-static void song_play(OPLChipClass &opl)
+static void sdl_init()
 {
-    auto output = [&](uint8_t reg, uint8_t val) {
-        opl.adlib_write(reg, val, 0);
-    };
+    if(0 != SDL_Init(SDL_INIT_AUDIO | SDL_INIT_VIDEO | SDL_INIT_TIMER)) {
+        SDL_Log(":%s", SDL_GetError());
+        exit(1);
+    }
 
-    output(0x20, 0x01);
-    output(0x40, 0x2A);
-    output(0x60, 0xF0);
-    output(0x80, 0x77);
-    output(0x23, 0x01);
-    output(0x43, 0x00);
-    output(0x63, 0xF0);
+    SDL_GL_SetAttribute(SDL_GL_DOUBLEBUFFER, 1);
+    SDL_GL_SetAttribute(SDL_GL_DEPTH_SIZE, 24);
+    SDL_GL_SetAttribute(SDL_GL_STENCIL_SIZE, 8);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MAJOR_VERSION, 2);
+    SDL_GL_SetAttribute(SDL_GL_CONTEXT_MINOR_VERSION, 2);
+    SDL_WindowFlags window_flags = (SDL_WindowFlags)(SDL_WINDOW_OPENGL | SDL_WINDOW_RESIZABLE | SDL_WINDOW_ALLOW_HIGHDPI);
+    window = SDL_CreateWindow("SynthEd", SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED, 800, 600, window_flags);
+    gl_context = SDL_GL_CreateContext(window);
+    SDL_GL_MakeCurrent(window, gl_context);
+    SDL_GL_SetSwapInterval(1); // Enable vsync
+}
 
-    output(0x20 + 1, 0x01);
-    output(0x40 + 1, 0x10);
-    output(0x60 + 1, 0xF0);
-    output(0x80 + 1, 0x77);
-    output(0x23 + 1, 0x01);
-    output(0x43 + 1, 0x05);
-    output(0x63 + 1, 0xF0);
+static void ui_init()
+{
+    IMGUI_CHECKVERSION();
+    ImGui::CreateContext();
+    ImGuiIO& io = ImGui::GetIO(); (void)io;
+    io.ConfigFlags |= ImGuiConfigFlags_NavEnableKeyboard;       // Enable Keyboard Controls
+    //io.ConfigFlags |= ImGuiConfigFlags_NavEnableGamepad;      // Enable Gamepad Controls
+    io.ConfigFlags |= ImGuiConfigFlags_DockingEnable;           // Enable Docking
+    //io.ConfigFlags |= ImGuiConfigFlags_ViewportsEnable;         // Enable Multi-Viewport / Platform Windows
+    //io.ConfigViewportsNoAutoMerge = true;
+    //io.ConfigViewportsNoTaskBarIcon = true;
 
-    output(0x20 + 2, 0x01);
-    output(0x40 + 2, 0x10);
-    output(0x60 + 2, 0xF0);
-    output(0x80 + 2, 0x77);
-    output(0x23 + 2, 0x01);
-    output(0x43 + 2, 0x05);
-    output(0x63 + 2, 0xF0);
+    ImGui_ImplSDL2_InitForOpenGL(window, gl_context);
+    ImGui_ImplOpenGL2_Init();
+}
 
-
-    output(0xA0, 0x98);
-    output(0xB0, 0x31);
+static void ui_mainloop()
+{
+    ImGui::Begin("Test");
+    if(ImGui::Button("Play demo song")) {
+        if(play_thread.joinable()) {
+            play_thread.join();
+        }
+        play_thread = std::thread([](){
+            SDL_PauseAudio(0);
+            test_play();
+            SDL_PauseAudio(1);
+        });
+    }
+    ImGui::End();
 }
 
 int main()
 {
-    if(0 != SDL_Init(SDL_INIT_AUDIO)) {
-        SDL_Log(":%s", SDL_GetError());
-        return 1;
-    }
+    sdl_init();
+    ui_init();
 
-    int sample_num = 0;
-
-    //struct Synth synth_data = {0};
     opl.adlib_init(SAMPLE_RATE, true);
 
     SDL_AudioSpec requested;
@@ -116,11 +110,35 @@ int main()
     if(got.format != requested.format)
         return 3;
 
-    SDL_PauseAudio(0);
-    //song_play(opl);
-    test_play();
-    SDL_Delay(1000);
-    SDL_PauseAudio(1);
+    bool running = true;
+    while(running) {
+        SDL_Event event;
+        while (SDL_PollEvent(&event))
+        {
+            ImGui_ImplSDL2_ProcessEvent(&event);
+            if (event.type == SDL_QUIT)
+                running = false;
+        }
+
+        ImGui_ImplOpenGL2_NewFrame();
+        ImGui_ImplSDL2_NewFrame(window);
+        ImGui::NewFrame();
+
+        ui_mainloop();
+
+        ImGuiIO &io = ImGui::GetIO();
+        ImGui::Render();
+        glViewport(0, 0, (int)io.DisplaySize.x, (int)io.DisplaySize.y);
+        glClearColor(0.25f, 0.25f, 0.25f, 1.0f);
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
+        SDL_GL_SwapWindow(window);
+    }
+
+    if(play_thread.joinable()) {
+        play_thread.join();
+    }
 
     SDL_CloseAudio();
 
