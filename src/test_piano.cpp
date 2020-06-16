@@ -67,6 +67,34 @@ static int keyboard_table[N_TOTAL] = {
 
 static bool initialized = false;
 static int  prev_note_held = -1;
+static uint8_t reg_B0 = 0;
+
+struct Operator {
+    uint8_t attack;
+    uint8_t decay;
+    uint8_t sustain;
+    uint8_t release;
+};
+
+struct Instrument {
+    Operator mod;
+    Operator car;
+
+    Instrument() {
+        //TODO: I want C99 designated initializers instead of constructors!
+        mod.attack  = 0xF;
+        mod.decay   = 0x0;
+        mod.sustain = 0x7;
+        mod.release = 0x7;
+
+        car.attack  = 0xF;
+        car.decay   = 0x0;
+        car.sustain = 0x7;
+        car.release = 0x7;
+    }
+};
+
+static Instrument instrument;
 
 static void registers_clear(void)
 {
@@ -75,6 +103,25 @@ static void registers_clear(void)
     }
 }
 
+static void instrument_set(const Instrument &instr, int voice)
+{
+    adlib_out(0x20 + voice, 0x01);
+    adlib_out(0x40 + voice, 0x2A);
+
+    //adlib_out(0x60 + voice, 0xF0);
+    //adlib_out(0x80 + voice, 0x77);
+    adlib_out(0x60 + voice, (instr.mod.attack << 4) | instr.mod.decay);
+    adlib_out(0x80 + voice, (instr.mod.sustain << 4) | instr.mod.release);
+
+    adlib_out(0x23 + voice, 0x01);
+    adlib_out(0x43 + voice, 0x00);
+
+    //adlib_out(0x63 + voice, 0xF0);
+    adlib_out(0x63 + voice, (instr.car.attack << 4) | instr.car.decay);
+    adlib_out(0x83 + voice, (instr.car.sustain << 4) | instr.car.release);
+}
+
+#if 0
 static void dummy_instrument_set()
 {
     adlib_out(0x20, 0x01);
@@ -101,10 +148,12 @@ static void dummy_instrument_set()
     adlib_out(0x43 + 2, 0x05);
     adlib_out(0x63 + 2, 0xF0);
 }
+#endif
 
 static void stop(int voice)
 {
-    adlib_out(0xB0 + voice, 0x00);
+    //adlib_out(0xB0 + voice, 0x00);
+    adlib_out(0xB0 + voice, reg_B0 & 0x1F);
 }
 
 static void play(int voice, unsigned short octave, unsigned short note)
@@ -113,6 +162,7 @@ static void play(int voice, unsigned short octave, unsigned short note)
     unsigned char msb = (1 << 5) | ((7 & octave) << 2) | ((0xFF00 & note) >> 8);
     adlib_out(0xA0 + voice, lsb);
     adlib_out(0xB0 + voice, msb);
+    reg_B0 = msb;
     //printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
 }
 
@@ -120,9 +170,15 @@ void test_piano()
 {
     if(!initialized) {
         registers_clear();
-        dummy_instrument_set();
+        //dummy_instrument_set();
         initialized = true;
     }
+
+    //for(int i = 0; i < 4; ++i) {
+    //    instrument_set(instrument, i);
+    //}
+    instrument_set(instrument, 0);
+
 
     SDL_PumpEvents();
     const uint8_t *keys = SDL_GetKeyboardState(nullptr);
@@ -137,6 +193,17 @@ void test_piano()
 
     ImGui::Begin("Piano");
     ImGui::LabelText("Keys Held", ": %s", key_label);
+
+    const uint8_t single_min = 0x0;
+    const uint8_t single_max = 0xF;
+    ImGui::SliderScalar("Modulator Attack",  ImGuiDataType_U8, &instrument.mod.attack, &single_min, &single_max);
+    ImGui::SliderScalar("Modulator Decay",   ImGuiDataType_U8, &instrument.mod.decay, &single_min, &single_max);
+    ImGui::SliderScalar("Modulator Sustain", ImGuiDataType_U8, &instrument.mod.sustain, &single_min, &single_max);
+    ImGui::SliderScalar("Modulator Release", ImGuiDataType_U8, &instrument.mod.release, &single_min, &single_max);
+    ImGui::SliderScalar("Carrier   Attack",  ImGuiDataType_U8, &instrument.car.attack, &single_min, &single_max);
+    ImGui::SliderScalar("Carrier   Decay",   ImGuiDataType_U8, &instrument.car.decay, &single_min, &single_max);
+    ImGui::SliderScalar("Carrier   Sustain", ImGuiDataType_U8, &instrument.car.sustain, &single_min, &single_max);
+    ImGui::SliderScalar("Carrier   Release", ImGuiDataType_U8, &instrument.car.release, &single_min, &single_max);
     ImGui::End();
 
     if(note_held != prev_note_held) {
