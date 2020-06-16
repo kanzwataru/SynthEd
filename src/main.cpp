@@ -27,6 +27,7 @@ void adlib_out(unsigned short addr, unsigned char val)
 {
     std::lock_guard<std::mutex> lock(audio_mutex);
 
+    printf("%X -> %X\n", addr, val);
     opl.adlib_write(addr, val, 0);
 }
 
@@ -81,12 +82,12 @@ static void ui_mainloop()
             play_thread.join();
         }
         play_thread = std::thread([](){
-            SDL_PauseAudio(0);
             test_play();
-            SDL_PauseAudio(1);
         });
     }
     ImGui::End();
+
+    test_piano();
 }
 
 int main()
@@ -109,6 +110,8 @@ int main()
         return 2;
     if(got.format != requested.format)
         return 3;
+
+    SDL_PauseAudio(0); //TODO: do this selectively
 
     bool running = true;
     while(running) {
@@ -134,12 +137,18 @@ int main()
 
         ImGui_ImplOpenGL2_RenderDrawData(ImGui::GetDrawData());
         SDL_GL_SwapWindow(window);
+        glFlush();
+        glFinish();
+        glClear(GL_COLOR_BUFFER_BIT);
+
+        fflush(stdout); // QtCreatorデバッグ対策
     }
 
     if(play_thread.joinable()) {
         play_thread.join();
     }
 
+    SDL_PauseAudio(1);
     SDL_CloseAudio();
 
     return 0;
