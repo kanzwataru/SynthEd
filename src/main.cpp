@@ -76,6 +76,8 @@ static void ui_init()
 
 static void ui_mainloop()
 {
+    static bool show_demo = false;
+
     ImGui::Begin("Test");
     if(ImGui::Button("Play demo song")) {
         if(play_thread.joinable()) {
@@ -84,6 +86,10 @@ static void ui_mainloop()
         play_thread = std::thread([](){
             test_play();
         });
+    }
+    ImGui::Checkbox("Show Demo Window", &show_demo);
+    if(show_demo) {
+        ImGui::ShowDemoWindow(&show_demo);
     }
     ImGui::End();
 

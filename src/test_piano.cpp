@@ -189,21 +189,30 @@ void test_piano()
             note_held = i;
         }
     }
-    const char *key_label = note_held == -1 ? "None" : note_name_table[note_held];
+    const char *key_label = note_held == -1 ? "_" : note_name_table[note_held];
 
     ImGui::Begin("Piano");
     ImGui::LabelText("Keys Held", ": %s", key_label);
 
     const uint8_t single_min = 0x0;
     const uint8_t single_max = 0xF;
-    ImGui::SliderScalar("Modulator Attack",  ImGuiDataType_U8, &instrument.mod.attack, &single_min, &single_max);
-    ImGui::SliderScalar("Modulator Decay",   ImGuiDataType_U8, &instrument.mod.decay, &single_min, &single_max);
-    ImGui::SliderScalar("Modulator Sustain", ImGuiDataType_U8, &instrument.mod.sustain, &single_min, &single_max);
-    ImGui::SliderScalar("Modulator Release", ImGuiDataType_U8, &instrument.mod.release, &single_min, &single_max);
-    ImGui::SliderScalar("Carrier   Attack",  ImGuiDataType_U8, &instrument.car.attack, &single_min, &single_max);
-    ImGui::SliderScalar("Carrier   Decay",   ImGuiDataType_U8, &instrument.car.decay, &single_min, &single_max);
-    ImGui::SliderScalar("Carrier   Sustain", ImGuiDataType_U8, &instrument.car.sustain, &single_min, &single_max);
-    ImGui::SliderScalar("Carrier   Release", ImGuiDataType_U8, &instrument.car.release, &single_min, &single_max);
+    ImGui::Separator();
+    ImGui::Columns(2, "Instrument", true);
+    ImGui::PushID("#modulator");
+    ImGui::LabelText("", "Modulator");
+    ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &instrument.mod.attack, &single_min, &single_max);
+    ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &instrument.mod.decay, &single_min, &single_max);
+    ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &instrument.mod.sustain, &single_min, &single_max);
+    ImGui::SliderScalar("Release", ImGuiDataType_U8, &instrument.mod.release, &single_min, &single_max);
+    ImGui::PopID();
+    ImGui::NextColumn();
+    ImGui::PushID("#carrier");
+    ImGui::LabelText("", "Carrier");
+    ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &instrument.car.attack, &single_min, &single_max);
+    ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &instrument.car.decay, &single_min, &single_max);
+    ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &instrument.car.sustain, &single_min, &single_max);
+    ImGui::SliderScalar("Release", ImGuiDataType_U8, &instrument.car.release, &single_min, &single_max);
+    ImGui::PopID();
     ImGui::End();
 
     if(note_held != prev_note_held) {
