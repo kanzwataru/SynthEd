@@ -74,17 +74,17 @@ static int keyboard_table[N_TOTAL * 2] = {
 
     [HI(N_LC)] = SDL_SCANCODE_Q,
     [HI(N_CS)] = SDL_SCANCODE_2,
-    [HI(N_D)]  = SDL_SCANCODE_E,
+    [HI(N_D)]  = SDL_SCANCODE_W,
     [HI(N_DS)] = SDL_SCANCODE_3,
-    [HI(N_E)]  = SDL_SCANCODE_R,
-    [HI(N_F)]  = SDL_SCANCODE_T,
-    [HI(N_FS)] = SDL_SCANCODE_6,
-    [HI(N_G)]  = SDL_SCANCODE_Y,
-    [HI(N_GS)] = SDL_SCANCODE_7,
-    [HI(N_A)]  = SDL_SCANCODE_U,
-    [HI(N_AS)] = SDL_SCANCODE_8,
-    [HI(N_B)]  = SDL_SCANCODE_I,
-    [HI(N_C)]  = SDL_SCANCODE_O
+    [HI(N_E)]  = SDL_SCANCODE_E,
+    [HI(N_F)]  = SDL_SCANCODE_R,
+    [HI(N_FS)] = SDL_SCANCODE_5,
+    [HI(N_G)]  = SDL_SCANCODE_T,
+    [HI(N_GS)] = SDL_SCANCODE_6,
+    [HI(N_A)]  = SDL_SCANCODE_Y,
+    [HI(N_AS)] = SDL_SCANCODE_7,
+    [HI(N_B)]  = SDL_SCANCODE_U,
+    [HI(N_C)]  = SDL_SCANCODE_I
 };
 
 enum Waveform {
@@ -263,6 +263,7 @@ void test_piano()
         }
 
         prev_notes[i].note = notes[i].note;
+        prev_notes[i].octave = notes[i].octave;
     }
 
     auto label_of = [&](int i) { return notes[i].note == -1 ? "__" : note_name_table[notes[i].note]; };
