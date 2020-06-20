@@ -56,20 +56,35 @@ static const char *note_name_table[N_TOTAL] = {
     [N_C]     = "C "
 };
 
-static int keyboard_table[N_TOTAL] = {
-    [N_LC]    = SDL_SCANCODE_Z,
-    [N_CS]    = SDL_SCANCODE_S,
-    [N_D]     = SDL_SCANCODE_X,
-    [N_DS]    = SDL_SCANCODE_D,
-    [N_E]     = SDL_SCANCODE_C,
-    [N_F]     = SDL_SCANCODE_V,
-    [N_FS]    = SDL_SCANCODE_G,
-    [N_G]     = SDL_SCANCODE_B,
-    [N_GS]    = SDL_SCANCODE_H,
-    [N_A]     = SDL_SCANCODE_N,
-    [N_AS]    = SDL_SCANCODE_J,
-    [N_B]     = SDL_SCANCODE_M,
-    [N_C]     = SDL_SCANCODE_COMMA
+#define HI(x) (N_TOTAL + (x))
+static int keyboard_table[N_TOTAL * 2] = {
+    [N_LC]     = SDL_SCANCODE_Z,
+    [N_CS]     = SDL_SCANCODE_S,
+    [N_D]      = SDL_SCANCODE_X,
+    [N_DS]     = SDL_SCANCODE_D,
+    [N_E]      = SDL_SCANCODE_C,
+    [N_F]      = SDL_SCANCODE_V,
+    [N_FS]     = SDL_SCANCODE_G,
+    [N_G]      = SDL_SCANCODE_B,
+    [N_GS]     = SDL_SCANCODE_H,
+    [N_A]      = SDL_SCANCODE_N,
+    [N_AS]     = SDL_SCANCODE_J,
+    [N_B]      = SDL_SCANCODE_M,
+    [N_C]      = SDL_SCANCODE_COMMA,
+
+    [HI(N_LC)] = SDL_SCANCODE_Q,
+    [HI(N_CS)] = SDL_SCANCODE_2,
+    [HI(N_D)]  = SDL_SCANCODE_E,
+    [HI(N_DS)] = SDL_SCANCODE_3,
+    [HI(N_E)]  = SDL_SCANCODE_R,
+    [HI(N_F)]  = SDL_SCANCODE_T,
+    [HI(N_FS)] = SDL_SCANCODE_6,
+    [HI(N_G)]  = SDL_SCANCODE_Y,
+    [HI(N_GS)] = SDL_SCANCODE_7,
+    [HI(N_A)]  = SDL_SCANCODE_U,
+    [HI(N_AS)] = SDL_SCANCODE_8,
+    [HI(N_B)]  = SDL_SCANCODE_I,
+    [HI(N_C)]  = SDL_SCANCODE_O
 };
 
 enum Waveform {
@@ -111,6 +126,7 @@ struct Instrument {
 
 struct NoteInfo {
     int note = -1;
+    int octave = 4;
     uint8_t reg_b0 = 0;
 };
 
@@ -202,9 +218,9 @@ void test_piano()
     struct NoteInfo notes[9];
     memcpy(notes, prev_notes, sizeof(notes));
 
-    auto find = [&](int n) -> int {
+    auto find = [&](int n, int o = -1) -> int {
         for(int i = 0; i < 9; ++i) {
-            if(notes[i].note == n) {
+            if(notes[i].note == n && (o == -1 || notes[i].octave == o)) {
                 return i;
             }
         }
@@ -212,20 +228,26 @@ void test_piano()
         return -1;
     };
 
-    for(int i = 0; i < N_TOTAL; ++i) {
+    int octave = 4;
+
+    for(int i = 0; i < N_TOTAL * 2; ++i) {
         if(keys[keyboard_table[i]]) {
-            int note_idx = find(i);
+            int key_note = i % N_TOTAL;
+            int key_octave = i < N_TOTAL ? octave : octave + 1;
+            int note_idx = find(key_note, key_octave);
             if(note_idx == -1) {
                 int free_idx = find(-1);
                 if(free_idx != -1) {
-                    notes[free_idx].note = i;
+                    notes[free_idx].note = key_note;
+                    notes[free_idx].octave = key_octave;
                 }
             }
         }
     }
 
     for(int i = 0; i < 9; ++i) {
-        if(!keys[keyboard_table[notes[i].note]]) {
+        int n = notes[i].octave > octave ? notes[i].note + N_TOTAL : notes[i].note;
+        if(!keys[keyboard_table[n]]) {// || notes[i].octave > octave + 1 || notes[i].octave < octave) {
             notes[i].note = -1;
         }
     }
@@ -233,7 +255,7 @@ void test_piano()
     for(int i = 0; i < 9; ++i) {
         if(notes[i].note != prev_notes[i].note) {
             if(notes[i].note != -1) {
-                play(i, 4, freq_table[notes[i].note]);
+                play(i, notes[i].octave, freq_table[notes[i].note]);
             }
             else {
                 stop(i);
