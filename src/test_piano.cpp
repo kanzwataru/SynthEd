@@ -84,6 +84,7 @@ struct Operator {
     uint8_t decay;
     uint8_t sustain;
     uint8_t release;
+    uint8_t volume;
     int     waveform;
 };
 
@@ -92,16 +93,18 @@ struct Instrument {
     Operator car;
 
     Instrument() {
-        mod.attack   = 0xF;
-        mod.decay    = 0x0;
-        mod.sustain  = 0x7;
-        mod.release  = 0x7;
+        mod.attack   = 0x0F;
+        mod.decay    = 0x00;
+        mod.sustain  = 0x07;
+        mod.release  = 0x07;
+        mod.volume   = 0x15;
         mod.waveform = WAVE_SINE;
 
-        car.attack   = 0xF;
-        car.decay    = 0x0;
-        car.sustain  = 0x7;
-        car.release  = 0x7;
+        car.attack   = 0x0F;
+        car.decay    = 0x00;
+        car.sustain  = 0x07;
+        car.release  = 0x07;
+        car.volume   = 0x3F;
         car.waveform = WAVE_SINE;
     }
 };
@@ -136,13 +139,13 @@ static void instrument_set(const Instrument &instr, int voice)
 {
     adlib_out(0x01, 1 << 5);
     adlib_out(register_of(0x20, voice, 0), 0x01);
-    adlib_out(register_of(0x40, voice, 0), 0x2A);
+    adlib_out(register_of(0x40, voice, 0), (255 - instr.mod.volume) & ~((1 << 7) | (1 << 6)));
     adlib_out(register_of(0x60, voice, 0), (instr.mod.attack << 4) | instr.mod.decay);
     adlib_out(register_of(0x80, voice, 0), (instr.mod.sustain << 4) | instr.mod.release);
     adlib_out(register_of(0xE0, voice, 0), instr.mod.waveform);
 
     adlib_out(register_of(0x20, voice, 1), 0x01);
-    adlib_out(register_of(0x40, voice, 1), 0x00);
+    adlib_out(register_of(0x40, voice, 1), (255 - instr.car.volume) & ~((1 << 7) | (1 << 6)));
     adlib_out(register_of(0x60, voice, 1), (instr.car.attack << 4) | instr.car.decay);
     adlib_out(register_of(0x80, voice, 1), (instr.car.sustain << 4) | instr.car.release);
     adlib_out(register_of(0xE0, voice, 1), instr.car.waveform);
@@ -168,10 +171,13 @@ static void ui_instrument_operator(Operator &op)
 {
     const uint8_t single_min = 0x0;
     const uint8_t single_max = 0xF;
+    const uint8_t vol_min = 0x00;
+    const uint8_t vol_max = 0x3F;
     ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &op.attack, &single_min, &single_max);
     ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &op.decay, &single_min, &single_max);
     ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &op.sustain, &single_min, &single_max);
     ImGui::SliderScalar("Release", ImGuiDataType_U8, &op.release, &single_min, &single_max);
+    ImGui::SliderScalar("Volume",  ImGuiDataType_U8, &op.volume, &vol_min, &vol_max);
     ImGui::RadioButton("Sine",       &op.waveform, 0); ImGui::SameLine();
     ImGui::RadioButton("Half-Sine",  &op.waveform, 1);
     ImGui::RadioButton("Abs-Sine",   &op.waveform, 2); ImGui::SameLine();
