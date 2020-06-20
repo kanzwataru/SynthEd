@@ -5,6 +5,7 @@
 #include "extern/imgui/imgui.h"
 
 enum Notes {
+    N_LC,
     N_CS,
     N_D,
     N_DS,
@@ -21,7 +22,11 @@ enum Notes {
     N_TOTAL
 };
 
+#define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
+
+#if 0
 static const uint16_t freq_table[N_TOTAL] = {
+    [N_LC]    = 0x0158,
     [N_CS]    = 0x016B,
     [N_D]     = 0x0181,
     [N_DS]    = 0x0198,
@@ -35,8 +40,45 @@ static const uint16_t freq_table[N_TOTAL] = {
     [N_B]     = 0x0287,
     [N_C]     = 0x02AE
 };
-
+#else
+#if 0
+// just temperament (C)
+static const uint16_t freq_table[N_TOTAL] = {
+    [N_LC]    = HZ_TO_FNUM(261.63, 4),
+    [N_CS]    = HZ_TO_FNUM(272.54, 4),
+    [N_D]     = HZ_TO_FNUM(294.33, 4),
+    [N_DS]    = HZ_TO_FNUM(313.96, 4),
+    [N_E]     = HZ_TO_FNUM(327.03, 4),
+    [N_F]     = HZ_TO_FNUM(348.83, 4),
+    [N_FS]    = HZ_TO_FNUM(367.92, 4),
+    [N_G]     = HZ_TO_FNUM(392.44, 4),
+    [N_GS]    = HZ_TO_FNUM(418.60, 4),
+    [N_A]     = HZ_TO_FNUM(436.05, 4),
+    [N_AS]    = HZ_TO_FNUM(470.93, 4),
+    [N_B]     = HZ_TO_FNUM(490.55, 4),
+    [N_C]     = HZ_TO_FNUM(523.25, 4)
+};
+#else
+// equal temperament
+static const uint16_t freq_table[N_TOTAL] = {
+    [N_LC]    = HZ_TO_FNUM(261.63, 4),
+    [N_CS]    = HZ_TO_FNUM(277.18, 4),
+    [N_D]     = HZ_TO_FNUM(293.66, 4),
+    [N_DS]    = HZ_TO_FNUM(311.13, 4),
+    [N_E]     = HZ_TO_FNUM(329.63, 4),
+    [N_F]     = HZ_TO_FNUM(349.23, 4),
+    [N_FS]    = HZ_TO_FNUM(369.99, 4),
+    [N_G]     = HZ_TO_FNUM(391.99, 4),
+    [N_GS]    = HZ_TO_FNUM(415.31, 4),
+    [N_A]     = HZ_TO_FNUM(440.00, 4),
+    [N_AS]    = HZ_TO_FNUM(466.16, 4),
+    [N_B]     = HZ_TO_FNUM(493.88, 4),
+    [N_C]     = HZ_TO_FNUM(523.25, 4)
+};
+#endif
+#endif
 static const char *note_name_table[N_TOTAL] = {
+    [N_LC]    = "C ",
     [N_CS]    = "C#",
     [N_D]     = "D ",
     [N_DS]    = "D#",
@@ -52,6 +94,7 @@ static const char *note_name_table[N_TOTAL] = {
 };
 
 static int keyboard_table[N_TOTAL] = {
+    [N_LC]    = SDL_SCANCODE_Z,
     [N_CS]    = SDL_SCANCODE_S,
     [N_D]     = SDL_SCANCODE_X,
     [N_DS]    = SDL_SCANCODE_D,
@@ -119,15 +162,18 @@ static uint8_t register_of(uint8_t addr, uint8_t voice, uint8_t op)
 
 static void instrument_set(const Instrument &instr, int voice)
 {
+    adlib_out(0x01, 1 << 5);
     adlib_out(register_of(0x20, voice, 0), 0x01);
     adlib_out(register_of(0x40, voice, 0), 0x2A);
     adlib_out(register_of(0x60, voice, 0), (instr.mod.attack << 4) | instr.mod.decay);
     adlib_out(register_of(0x80, voice, 0), (instr.mod.sustain << 4) | instr.mod.release);
+    adlib_out(register_of(0xE0, voice, 0), 0x00);
 
     adlib_out(register_of(0x20, voice, 1), 0x01);
     adlib_out(register_of(0x40, voice, 1), 0x00);
     adlib_out(register_of(0x60, voice, 1), (instr.car.attack << 4) | instr.car.decay);
     adlib_out(register_of(0x80, voice, 1), (instr.car.sustain << 4) | instr.car.release);
+    adlib_out(register_of(0xE0, voice, 1), 0x00);
 }
 
 #if 0
