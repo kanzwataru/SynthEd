@@ -24,42 +24,6 @@ enum Notes {
 
 #define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
 
-#if 0
-static const uint16_t freq_table[N_TOTAL] = {
-    [N_LC]    = 0x0158,
-    [N_CS]    = 0x016B,
-    [N_D]     = 0x0181,
-    [N_DS]    = 0x0198,
-    [N_E]     = 0x01B0,
-    [N_F]     = 0x01CA,
-    [N_FS]    = 0x01E5,
-    [N_G]     = 0x0202,
-    [N_GS]    = 0x0220,
-    [N_A]     = 0x0241,
-    [N_AS]    = 0x0263,
-    [N_B]     = 0x0287,
-    [N_C]     = 0x02AE
-};
-#else
-#if 0
-// just temperament (C)
-static const uint16_t freq_table[N_TOTAL] = {
-    [N_LC]    = HZ_TO_FNUM(261.63, 4),
-    [N_CS]    = HZ_TO_FNUM(272.54, 4),
-    [N_D]     = HZ_TO_FNUM(294.33, 4),
-    [N_DS]    = HZ_TO_FNUM(313.96, 4),
-    [N_E]     = HZ_TO_FNUM(327.03, 4),
-    [N_F]     = HZ_TO_FNUM(348.83, 4),
-    [N_FS]    = HZ_TO_FNUM(367.92, 4),
-    [N_G]     = HZ_TO_FNUM(392.44, 4),
-    [N_GS]    = HZ_TO_FNUM(418.60, 4),
-    [N_A]     = HZ_TO_FNUM(436.05, 4),
-    [N_AS]    = HZ_TO_FNUM(470.93, 4),
-    [N_B]     = HZ_TO_FNUM(490.55, 4),
-    [N_C]     = HZ_TO_FNUM(523.25, 4)
-};
-#else
-// equal temperament
 static const uint16_t freq_table[N_TOTAL] = {
     [N_LC]    = HZ_TO_FNUM(261.63, 4),
     [N_CS]    = HZ_TO_FNUM(277.18, 4),
@@ -75,8 +39,7 @@ static const uint16_t freq_table[N_TOTAL] = {
     [N_B]     = HZ_TO_FNUM(493.88, 4),
     [N_C]     = HZ_TO_FNUM(523.25, 4)
 };
-#endif
-#endif
+
 static const char *note_name_table[N_TOTAL] = {
     [N_LC]    = "C ",
     [N_CS]    = "C#",
@@ -109,11 +72,19 @@ static int keyboard_table[N_TOTAL] = {
     [N_C]     = SDL_SCANCODE_COMMA
 };
 
+enum Waveform {
+    WAVE_SINE       = 0x00,
+    WAVE_HALF_SINE  = 0x01,
+    WAVE_ABS_SINE   = 0x02,
+    WAVE_PULSE_SINE = 0x03
+};
+
 struct Operator {
     uint8_t attack;
     uint8_t decay;
     uint8_t sustain;
     uint8_t release;
+    int     waveform;
 };
 
 struct Instrument {
@@ -121,16 +92,17 @@ struct Instrument {
     Operator car;
 
     Instrument() {
-        //TODO: I want C99 designated initializers instead of constructors!
-        mod.attack  = 0xF;
-        mod.decay   = 0x0;
-        mod.sustain = 0x7;
-        mod.release = 0x7;
+        mod.attack   = 0xF;
+        mod.decay    = 0x0;
+        mod.sustain  = 0x7;
+        mod.release  = 0x7;
+        mod.waveform = WAVE_SINE;
 
-        car.attack  = 0xF;
-        car.decay   = 0x0;
-        car.sustain = 0x7;
-        car.release = 0x7;
+        car.attack   = 0xF;
+        car.decay    = 0x0;
+        car.sustain  = 0x7;
+        car.release  = 0x7;
+        car.waveform = WAVE_SINE;
     }
 };
 
@@ -167,43 +139,14 @@ static void instrument_set(const Instrument &instr, int voice)
     adlib_out(register_of(0x40, voice, 0), 0x2A);
     adlib_out(register_of(0x60, voice, 0), (instr.mod.attack << 4) | instr.mod.decay);
     adlib_out(register_of(0x80, voice, 0), (instr.mod.sustain << 4) | instr.mod.release);
-    adlib_out(register_of(0xE0, voice, 0), 0x00);
+    adlib_out(register_of(0xE0, voice, 0), instr.mod.waveform);
 
     adlib_out(register_of(0x20, voice, 1), 0x01);
     adlib_out(register_of(0x40, voice, 1), 0x00);
     adlib_out(register_of(0x60, voice, 1), (instr.car.attack << 4) | instr.car.decay);
     adlib_out(register_of(0x80, voice, 1), (instr.car.sustain << 4) | instr.car.release);
-    adlib_out(register_of(0xE0, voice, 1), 0x00);
+    adlib_out(register_of(0xE0, voice, 1), instr.car.waveform);
 }
-
-#if 0
-static void dummy_instrument_set()
-{
-    adlib_out(0x20, 0x01);
-    adlib_out(0x40, 0x2A);
-    adlib_out(0x60, 0xF0);
-    adlib_out(0x80, 0x77);
-    adlib_out(0x23, 0x01);
-    adlib_out(0x43, 0x00);
-    adlib_out(0x63, 0xF0);
-
-    adlib_out(0x20 + 1, 0x01);
-    adlib_out(0x40 + 1, 0x10);
-    adlib_out(0x60 + 1, 0xF0);
-    adlib_out(0x80 + 1, 0x77);
-    adlib_out(0x23 + 1, 0x01);
-    adlib_out(0x43 + 1, 0x05);
-    adlib_out(0x63 + 1, 0xF0);
-
-    adlib_out(0x20 + 2, 0x01);
-    adlib_out(0x40 + 2, 0x10);
-    adlib_out(0x60 + 2, 0xF0);
-    adlib_out(0x80 + 2, 0x77);
-    adlib_out(0x23 + 2, 0x01);
-    adlib_out(0x43 + 2, 0x05);
-    adlib_out(0x63 + 2, 0xF0);
-}
-#endif
 
 static void stop(int voice)
 {
@@ -219,6 +162,20 @@ static void play(int voice, unsigned short octave, unsigned short note)
     adlib_out(0xB0 + voice, msb);
     prev_notes[voice].reg_b0 = msb;
     //printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
+}
+
+static void ui_instrument_operator(Operator &op)
+{
+    const uint8_t single_min = 0x0;
+    const uint8_t single_max = 0xF;
+    ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &op.attack, &single_min, &single_max);
+    ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &op.decay, &single_min, &single_max);
+    ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &op.sustain, &single_min, &single_max);
+    ImGui::SliderScalar("Release", ImGuiDataType_U8, &op.release, &single_min, &single_max);
+    ImGui::RadioButton("Sine",       &op.waveform, 0); ImGui::SameLine();
+    ImGui::RadioButton("Half-Sine",  &op.waveform, 1);
+    ImGui::RadioButton("Abs-Sine",   &op.waveform, 2); ImGui::SameLine();
+    ImGui::RadioButton("Pulse-Sine", &op.waveform, 3);
 }
 
 void test_piano()
@@ -286,24 +243,16 @@ void test_piano()
     ImGui::LabelText("Keys Held", ": %s %s %s %s %s %s %s %s %s",
                      label_of(0), label_of(1), label_of(2), label_of(3), label_of(4), label_of(5), label_of(6), label_of(7), label_of(8));
 
-    const uint8_t single_min = 0x0;
-    const uint8_t single_max = 0xF;
     ImGui::Separator();
     ImGui::Columns(2, "Instrument", true);
     ImGui::PushID("#modulator");
     ImGui::LabelText("", "Modulator");
-    ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &instrument.mod.attack, &single_min, &single_max);
-    ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &instrument.mod.decay, &single_min, &single_max);
-    ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &instrument.mod.sustain, &single_min, &single_max);
-    ImGui::SliderScalar("Release", ImGuiDataType_U8, &instrument.mod.release, &single_min, &single_max);
+    ui_instrument_operator(instrument.mod);
     ImGui::PopID();
     ImGui::NextColumn();
     ImGui::PushID("#carrier");
     ImGui::LabelText("", "Carrier");
-    ImGui::SliderScalar("Attack",  ImGuiDataType_U8, &instrument.car.attack, &single_min, &single_max);
-    ImGui::SliderScalar("Decay",   ImGuiDataType_U8, &instrument.car.decay, &single_min, &single_max);
-    ImGui::SliderScalar("Sustain", ImGuiDataType_U8, &instrument.car.sustain, &single_min, &single_max);
-    ImGui::SliderScalar("Release", ImGuiDataType_U8, &instrument.car.release, &single_min, &single_max);
+    ui_instrument_operator(instrument.car);
     ImGui::PopID();
     ImGui::End();
 
