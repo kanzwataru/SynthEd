@@ -122,9 +122,9 @@ void test_editor()
             lp.x + (note.time * cell_single) + (note.duration * cell_single),
             lp.y + (to_note(note.note.note) + 1 + octave_offset) * cell_height
         };
-        const ImVec2 textp = {minp.x + 4, minp.y + 4};
+        //const ImVec2 textp = {minp.x + 4, minp.y + 4};
 
-        ImGui::PushID(i); // TODO: global offset table/enums?
+        ImGui::PushID(5000 + i); // TODO: global offset table/enums?
 
         const float rounding = 15.0f;
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
@@ -237,7 +237,7 @@ void test_editor()
             */
 
             // TODO: Maybe need to do PushID???
-            ImGui::PushID(4000 + y);
+            ImGui::PushID(y);
             ImGui::SetCursorPos({lp.x, lp.y + (y * cell_height)});
             float width = piano_width;
 
