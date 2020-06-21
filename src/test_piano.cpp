@@ -45,7 +45,7 @@ struct Instrument {
 #define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
 
 static const uint16_t freq_table[N_TOTAL] = {
-    [N_LC]    = HZ_TO_FNUM(261.63, 4),
+    [N_C]    = HZ_TO_FNUM(261.63, 4),
     [N_CS]    = HZ_TO_FNUM(277.18, 4),
     [N_D]     = HZ_TO_FNUM(293.66, 4),
     [N_DS]    = HZ_TO_FNUM(311.13, 4),
@@ -57,12 +57,11 @@ static const uint16_t freq_table[N_TOTAL] = {
     [N_A]     = HZ_TO_FNUM(440.00, 4),
     [N_AS]    = HZ_TO_FNUM(466.16, 4),
     [N_B]     = HZ_TO_FNUM(493.88, 4),
-    [N_C]     = HZ_TO_FNUM(523.25, 4)
 };
 
 #define HI(x) (N_TOTAL + (x))
 static int keyboard_table[N_TOTAL * 2] = {
-    [N_LC]     = SDL_SCANCODE_Z,
+    [N_C]      = SDL_SCANCODE_Z,
     [N_CS]     = SDL_SCANCODE_S,
     [N_D]      = SDL_SCANCODE_X,
     [N_DS]     = SDL_SCANCODE_D,
@@ -74,9 +73,8 @@ static int keyboard_table[N_TOTAL * 2] = {
     [N_A]      = SDL_SCANCODE_N,
     [N_AS]     = SDL_SCANCODE_J,
     [N_B]      = SDL_SCANCODE_M,
-    [N_C]      = SDL_SCANCODE_COMMA,
 
-    [HI(N_LC)] = SDL_SCANCODE_Q,
+    [HI(N_C)]  = SDL_SCANCODE_Q,
     [HI(N_CS)] = SDL_SCANCODE_2,
     [HI(N_D)]  = SDL_SCANCODE_W,
     [HI(N_DS)] = SDL_SCANCODE_3,
@@ -88,9 +86,7 @@ static int keyboard_table[N_TOTAL * 2] = {
     [HI(N_A)]  = SDL_SCANCODE_Y,
     [HI(N_AS)] = SDL_SCANCODE_7,
     [HI(N_B)]  = SDL_SCANCODE_U,
-    [HI(N_C)]  = SDL_SCANCODE_I
 };
-
 
 static bool initialized = false;
 static Instrument instrument;

@@ -2,7 +2,7 @@
 #include <stdint.h>
 
 enum Notes {
-    N_LC,
+    N_C,
     N_CS,
     N_D,
     N_DS,
@@ -14,7 +14,6 @@ enum Notes {
     N_A,
     N_AS,
     N_B,
-    N_C,
 
     N_TOTAL
 };

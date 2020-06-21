@@ -76,15 +76,14 @@ void test_editor()
 
             const char *note_name = note_name_table[to_note(note)];
             char str[5];
-            if(to_note(note) == N_LC) {
+            if(to_note(note) == N_C) {
                 assert(octave < 10);
                 str[0] = '0' + (octaves - 1 - octave);
-                str[1] = ' ';
             }
             else {
                 str[0] = ' ';
-                str[1] = ' ';
             }
+            str[1] = ' ';
             str[2] = note_name[0];
             str[3] = note_name[1];
             str[4] = '\0';
