@@ -25,6 +25,8 @@ static NoteBlock section_notes[] = {
     {{N_A, 4}, 4, L_HALF}
 };
 
+static int to_note(int n) { return (N_TOTAL - 1) - n; }
+
 void test_editor()
 {
     static float s_zoom = 1.0f;
@@ -33,18 +35,15 @@ void test_editor()
     ImGui::SliderFloat("Zoom", &s_zoom, 0.1f, 6.0f);
     ImDrawList *root_draw_list = ImGui::GetWindowDrawList();
 
-    // piano
-    ImGui::SetCursorPosX(ImGui::GetCursorPosX() + 40.0f);
+    const float piano_width = 50.0f;
 
-    ImGui::BeginChild("EditorArea", {0, 0}, true, ImGuiWindowFlags_HorizontalScrollbar);
-    ImDrawList *draw_list = ImGui::GetWindowDrawList();
     const ImU32 grey_col = ImColor(0.25f, 0.25f, 0.25f, 0.5f);
     const ImU32 white_key_bg_col = ImColor(0.15f, 0.15f, 0.15f, 0.5f);
     const ImU32 bold_col = ImColor(0.5f, 0.5f, 0.5f, 0.75f);
     const ImGuiIO &io = ImGui::GetIO();
-    const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImVec2 orig_pos = ImGui::GetCursorPos();
+    const ImVec2 orig_pos_screen = ImGui::GetCursorScreenPos();
 
-    // grid
     const int notes = N_TOTAL;
     const int octaves = 8;
 
@@ -52,13 +51,18 @@ void test_editor()
     const float cell_height = 20.0f;
     const float cell_width  = 92.0f * s_zoom;
     const float cell_single = cell_width / L_WHOLE;
+    const ImVec2 overall_size = {(whole_note_count * cell_width), (notes * octaves) * cell_height};
 
-    auto to_note = [](int n) { return (N_TOTAL - 1) - n; };
+    ImGui::SetCursorPos({orig_pos.x + piano_width, orig_pos.y});
+
+    // grid
+    ImGui::BeginChild("EditorArea", {0, 0}, true, ImGuiWindowFlags_HorizontalScrollbar);
+    ImDrawList *draw_list = ImGui::GetWindowDrawList();
+    ImVec2 p = ImGui::GetCursorScreenPos();
 
     for(int note = 0; note < notes; ++note) {
         for(int octave = 0; octave < octaves; ++octave) {
             int y = note + (notes * octave);
-
 
             draw_list->AddLine(
                 {p.x + 0, p.y + y * cell_height},
@@ -73,26 +77,6 @@ void test_editor()
                     white_key_bg_col
                 );
             }
-
-            const char *note_name = note_name_table[to_note(note)];
-            char str[5];
-            if(to_note(note) == N_C) {
-                assert(octave < 10);
-                str[0] = '0' + (octaves - 1 - octave);
-            }
-            else {
-                str[0] = ' ';
-            }
-            str[1] = ' ';
-            str[2] = note_name[0];
-            str[3] = note_name[1];
-            str[4] = '\0';
-
-            root_draw_list->AddText(
-                {p.x - 40.0f, p.y + y * cell_height + 2.0f},
-                ImGui::GetColorU32(ImGuiCol_Text),
-                str
-            );
         }
     }
 
@@ -162,8 +146,83 @@ void test_editor()
         ImGui::PopID();
     }
 
-    ImGui::Dummy({(whole_note_count * cell_width), (notes * octaves) * cell_height});
+    ImGui::Dummy(overall_size);
     ImGui::EndChild();
+    ImGui::SameLine();
+
+    // piano
+    root_draw_list->PushClipRect(
+        orig_pos_screen,
+        {orig_pos_screen.x + ImGui::GetWindowSize().x, ImGui::GetWindowSize().y},
+        true
+    );
+
+    ImGui::SetCursorPos({orig_pos.x, p.y - cell_height});
+    const ImVec2 lp = ImGui::GetCursorPos();
+    p = ImGui::GetCursorScreenPos();
+
+    root_draw_list->AddRectFilled(
+        p,
+        {p.x + piano_width, p.y + overall_size.y},
+        ImU32(ImColor{0.65f, 0.65f, 0.65f, 1.0f})
+    );
+
+    for(int note = 0; note < notes; ++note) {
+        for(int octave = 0; octave < octaves; ++octave) {
+            int y = note + (notes * octave);
+
+            const char *note_name = note_name_table[to_note(note)];
+            char str[5];
+            if(to_note(note) == N_C) {
+                assert(octave < 10);
+                str[0] = '0' + (octaves - 1 - octave);
+            }
+            else {
+                str[0] = ' ';
+            }
+            str[1] = ' ';
+            str[2] = note_name[0];
+            str[3] = note_name[1];
+            str[4] = '\0';
+
+            /*
+            root_draw_list->AddText(
+                {p.x, p.y + y * cell_height + 2.0f},
+                ImGui::GetColorU32(ImGuiCol_Text),
+                str
+            );
+            */
+
+            // TODO: Maybe need to do PushID???
+            ImGui::PushID(4000 + y);
+            ImGui::SetCursorPos({lp.x, lp.y + (y * cell_height)});
+            float width = piano_width;
+
+            ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {0.0f, 0.5f});
+            ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 5.0f);
+            if(note_key_type_table[to_note(note)] == KEY_WHITE) {
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.65f, 0.65f, 0.65f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImU32(ImColor{0.45f, 0.45f, 0.45f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImU32(ImColor{0.75f, 0.75f, 0.75f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ImU32(ImColor{0.05f, 0.05f, 0.05f, 1.0f}));
+            }
+            else {
+                width *= 0.75f;
+                ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.15f, 0.15f, 0.15f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImU32(ImColor{0.05f, 0.05f, 0.05f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImU32(ImColor{0.25f, 0.25f, 0.25f, 1.0f}));
+                ImGui::PushStyleColor(ImGuiCol_Text,          ImU32(ImColor{0.95f, 0.95f, 0.95f, 1.0f}));
+            }
+
+            ImGui::Button(str, {width, cell_height});
+
+            ImGui::PopStyleColor(4);
+            ImGui::PopStyleVar(2);
+            ImGui::SetCursorPos(lp);
+            ImGui::PopID();
+        }
+    }
+    root_draw_list->PopClipRect();
 
     ImGui::End();
 }
