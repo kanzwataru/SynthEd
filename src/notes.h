@@ -19,21 +19,13 @@ enum Notes {
     N_TOTAL
 };
 
-static const char *note_name_table[N_TOTAL] = {
-    [N_LC]    = "C ",
-    [N_CS]    = "C#",
-    [N_D]     = "D ",
-    [N_DS]    = "D#",
-    [N_E]     = "E ",
-    [N_F]     = "F ",
-    [N_FS]    = "F#",
-    [N_G]     = "G ",
-    [N_GS]    = "G#",
-    [N_A]     = "A ",
-    [N_AS]    = "A#",
-    [N_B]     = "B ",
-    [N_C]     = "C "
+enum KeyType {
+    KEY_WHITE = 0,
+    KEY_BLACK = 1
 };
+
+extern const KeyType note_key_type_table[N_TOTAL];
+extern const char *note_name_table[N_TOTAL];
 
 struct Note {
     int note;
