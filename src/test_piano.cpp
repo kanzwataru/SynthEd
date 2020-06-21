@@ -3,89 +3,7 @@
 #include <SDL2/SDL.h>
 #include "main_test.h"
 #include "extern/imgui/imgui.h"
-
-enum Notes {
-    N_LC,
-    N_CS,
-    N_D,
-    N_DS,
-    N_E,
-    N_F,
-    N_FS,
-    N_G,
-    N_GS,
-    N_A,
-    N_AS,
-    N_B,
-    N_C,
-
-    N_TOTAL
-};
-
-#define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
-
-static const uint16_t freq_table[N_TOTAL] = {
-    [N_LC]    = HZ_TO_FNUM(261.63, 4),
-    [N_CS]    = HZ_TO_FNUM(277.18, 4),
-    [N_D]     = HZ_TO_FNUM(293.66, 4),
-    [N_DS]    = HZ_TO_FNUM(311.13, 4),
-    [N_E]     = HZ_TO_FNUM(329.63, 4),
-    [N_F]     = HZ_TO_FNUM(349.23, 4),
-    [N_FS]    = HZ_TO_FNUM(369.99, 4),
-    [N_G]     = HZ_TO_FNUM(391.99, 4),
-    [N_GS]    = HZ_TO_FNUM(415.31, 4),
-    [N_A]     = HZ_TO_FNUM(440.00, 4),
-    [N_AS]    = HZ_TO_FNUM(466.16, 4),
-    [N_B]     = HZ_TO_FNUM(493.88, 4),
-    [N_C]     = HZ_TO_FNUM(523.25, 4)
-};
-
-static const char *note_name_table[N_TOTAL] = {
-    [N_LC]    = "C ",
-    [N_CS]    = "C#",
-    [N_D]     = "D ",
-    [N_DS]    = "D#",
-    [N_E]     = "E ",
-    [N_F]     = "F ",
-    [N_FS]    = "F#",
-    [N_G]     = "G ",
-    [N_GS]    = "G#",
-    [N_A]     = "A ",
-    [N_AS]    = "A#",
-    [N_B]     = "B ",
-    [N_C]     = "C "
-};
-
-#define HI(x) (N_TOTAL + (x))
-static int keyboard_table[N_TOTAL * 2] = {
-    [N_LC]     = SDL_SCANCODE_Z,
-    [N_CS]     = SDL_SCANCODE_S,
-    [N_D]      = SDL_SCANCODE_X,
-    [N_DS]     = SDL_SCANCODE_D,
-    [N_E]      = SDL_SCANCODE_C,
-    [N_F]      = SDL_SCANCODE_V,
-    [N_FS]     = SDL_SCANCODE_G,
-    [N_G]      = SDL_SCANCODE_B,
-    [N_GS]     = SDL_SCANCODE_H,
-    [N_A]      = SDL_SCANCODE_N,
-    [N_AS]     = SDL_SCANCODE_J,
-    [N_B]      = SDL_SCANCODE_M,
-    [N_C]      = SDL_SCANCODE_COMMA,
-
-    [HI(N_LC)] = SDL_SCANCODE_Q,
-    [HI(N_CS)] = SDL_SCANCODE_2,
-    [HI(N_D)]  = SDL_SCANCODE_W,
-    [HI(N_DS)] = SDL_SCANCODE_3,
-    [HI(N_E)]  = SDL_SCANCODE_E,
-    [HI(N_F)]  = SDL_SCANCODE_R,
-    [HI(N_FS)] = SDL_SCANCODE_5,
-    [HI(N_G)]  = SDL_SCANCODE_T,
-    [HI(N_GS)] = SDL_SCANCODE_6,
-    [HI(N_A)]  = SDL_SCANCODE_Y,
-    [HI(N_AS)] = SDL_SCANCODE_7,
-    [HI(N_B)]  = SDL_SCANCODE_U,
-    [HI(N_C)]  = SDL_SCANCODE_I
-};
+#include "notes.h"
 
 enum Waveform {
     WAVE_SINE       = 0x00,
@@ -124,15 +42,61 @@ struct Instrument {
     }
 };
 
-struct NoteInfo {
-    int note = -1;
-    int octave = 4;
-    uint8_t reg_b0 = 0;
+#define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
+
+static const uint16_t freq_table[N_TOTAL] = {
+    [N_LC]    = HZ_TO_FNUM(261.63, 4),
+    [N_CS]    = HZ_TO_FNUM(277.18, 4),
+    [N_D]     = HZ_TO_FNUM(293.66, 4),
+    [N_DS]    = HZ_TO_FNUM(311.13, 4),
+    [N_E]     = HZ_TO_FNUM(329.63, 4),
+    [N_F]     = HZ_TO_FNUM(349.23, 4),
+    [N_FS]    = HZ_TO_FNUM(369.99, 4),
+    [N_G]     = HZ_TO_FNUM(391.99, 4),
+    [N_GS]    = HZ_TO_FNUM(415.31, 4),
+    [N_A]     = HZ_TO_FNUM(440.00, 4),
+    [N_AS]    = HZ_TO_FNUM(466.16, 4),
+    [N_B]     = HZ_TO_FNUM(493.88, 4),
+    [N_C]     = HZ_TO_FNUM(523.25, 4)
 };
+
+#define HI(x) (N_TOTAL + (x))
+static int keyboard_table[N_TOTAL * 2] = {
+    [N_LC]     = SDL_SCANCODE_Z,
+    [N_CS]     = SDL_SCANCODE_S,
+    [N_D]      = SDL_SCANCODE_X,
+    [N_DS]     = SDL_SCANCODE_D,
+    [N_E]      = SDL_SCANCODE_C,
+    [N_F]      = SDL_SCANCODE_V,
+    [N_FS]     = SDL_SCANCODE_G,
+    [N_G]      = SDL_SCANCODE_B,
+    [N_GS]     = SDL_SCANCODE_H,
+    [N_A]      = SDL_SCANCODE_N,
+    [N_AS]     = SDL_SCANCODE_J,
+    [N_B]      = SDL_SCANCODE_M,
+    [N_C]      = SDL_SCANCODE_COMMA,
+
+    [HI(N_LC)] = SDL_SCANCODE_Q,
+    [HI(N_CS)] = SDL_SCANCODE_2,
+    [HI(N_D)]  = SDL_SCANCODE_W,
+    [HI(N_DS)] = SDL_SCANCODE_3,
+    [HI(N_E)]  = SDL_SCANCODE_E,
+    [HI(N_F)]  = SDL_SCANCODE_R,
+    [HI(N_FS)] = SDL_SCANCODE_5,
+    [HI(N_G)]  = SDL_SCANCODE_T,
+    [HI(N_GS)] = SDL_SCANCODE_6,
+    [HI(N_A)]  = SDL_SCANCODE_Y,
+    [HI(N_AS)] = SDL_SCANCODE_7,
+    [HI(N_B)]  = SDL_SCANCODE_U,
+    [HI(N_C)]  = SDL_SCANCODE_I
+};
+
 
 static bool initialized = false;
 static Instrument instrument;
-static NoteInfo prev_notes[9];
+
+static Note prev_notes[N_TOTAL];
+static uint8_t reg_b0s[N_TOTAL];
 
 static void registers_clear(void)
 {
@@ -170,7 +134,7 @@ static void instrument_set(const Instrument &instr, int voice)
 static void stop(int voice)
 {
     //adlib_out(0xB0 + voice, 0x00);
-    adlib_out(0xB0 + voice, prev_notes[voice].reg_b0 & 0x1F);
+    adlib_out(0xB0 + voice, reg_b0s[voice] & 0x1F);
 }
 
 static void play(int voice, unsigned short octave, unsigned short note)
@@ -179,7 +143,7 @@ static void play(int voice, unsigned short octave, unsigned short note)
     unsigned char msb = (1 << 5) | ((7 & octave) << 2) | ((0xFF00 & note) >> 8);
     adlib_out(0xA0 + voice, lsb);
     adlib_out(0xB0 + voice, msb);
-    prev_notes[voice].reg_b0 = msb;
+    reg_b0s[voice] = msb;
     //printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
 }
 
@@ -204,6 +168,10 @@ void test_piano()
 {
     if(!initialized) {
         registers_clear();
+        for(int i = 0; i < N_TOTAL; ++i) {
+            prev_notes[i].note = -1;
+            prev_notes[i].octave = 4;
+        }
         //dummy_instrument_set();
         initialized = true;
     }
@@ -215,7 +183,7 @@ void test_piano()
 
     SDL_PumpEvents();
     const uint8_t *keys = SDL_GetKeyboardState(nullptr);
-    struct NoteInfo notes[9];
+    struct Note notes[9];
     memcpy(notes, prev_notes, sizeof(notes));
 
     auto find = [&](int n, int o = -1) -> int {
