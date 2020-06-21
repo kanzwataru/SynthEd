@@ -82,12 +82,17 @@ void test_editor()
     */
 
     for(const auto &note : section_notes) {
+        const ImVec2 minp = {p.x + note.time * cell_single, p.y + (N_TOTAL - note.note.note) * cell_height};
+        const ImVec2 maxp = {p.x + (note.time * cell_single) + (note.duration * cell_single), p.y + (N_TOTAL - note.note.note + 1) * cell_height};
+        const ImVec2 textp = {minp.x + 4, minp.y + 4};
+
         draw_list->AddRectFilled(
-            {p.x + note.time * cell_single, p.y + (N_TOTAL - note.note.note) * cell_height},
-            {p.x + (note.time * cell_single) + (note.duration * cell_single), p.y + (N_TOTAL - note.note.note + 1) * cell_height},
+            minp,
+            maxp,
             ImColor{0.75f, 0.45f, 0.35f, 1.0f},
             15.0f
         );
+        draw_list->AddText(textp, ImColor{0.15f, 0.15f, 0.15f, 0.75f}, note_name_table[note.note.note]);
     }
 
     ImGui::Dummy({(whole_note_count * cell_width), (notes * octaves) * cell_height});
