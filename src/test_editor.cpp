@@ -1,5 +1,6 @@
 #include "main_test.h"
 #include <imgui.h>
+#include <cmath>
 #include "notes.h"
 
 #define countof(x) sizeof((x)) / sizeof(x[0])
@@ -20,10 +21,20 @@ struct NoteBlock {
     int  duration;
 };
 
+struct NoteEdit {
+    NoteBlock *block;
+    NoteBlock prev_block;
+    NoteBlock new_block;
+};
+
 static NoteBlock section_notes[] = {
     {{N_C, 4}, 0, L_WHOLE},
-    {{N_A, 4}, 4, L_HALF}
+    {{N_A, 4}, 4, L_HALF},
+    {{N_B, 7}, 10, L_WHOLE}
 };
+
+static NoteEdit edit = {};
+static bool was_editing = false;
 
 static int to_note(int n) { return (N_TOTAL - 1) - n; }
 
@@ -97,11 +108,12 @@ void test_editor()
     }
 
     // notes
+    bool any_is_editing = false;
     for(size_t i = 0; i < countof(section_notes); ++i) {
-        const auto &note = section_notes[i];
+        auto &note = section_notes[i];
 
         const ImVec2 lp = ImGui::GetCursorPos();
-        const float octave_offset = (N_TOTAL * (octaves - note.note.octave));
+        const float octave_offset = (N_TOTAL * (octaves - 1 - note.note.octave));
         const ImVec2 minp = {
             lp.x + note.time * cell_single,
             lp.y + (to_note(note.note.note) + octave_offset) * cell_height
@@ -136,7 +148,27 @@ void test_editor()
                 startpos.y + (cell_height)
             };
 
-            draw_list->AddRect(startpos, endpos, ImGui::GetColorU32(ImGuiCol_Button), rounding);
+            const int block_x = std::round((startpos.x - p.x) / (cell_single));
+            const int block_y = std::round((startpos.y - p.y) / (cell_height));
+
+            any_is_editing = true;
+            edit.block = &note;
+            edit.prev_block = note;
+            edit.new_block = note;
+            edit.new_block.note.note = N_TOTAL - 1 - (block_y % N_TOTAL);
+            edit.new_block.note.octave = octaves - 1 - (block_y / N_TOTAL);
+            edit.new_block.time = block_x;
+            assert(edit.new_block.note.note >= 0 && edit.new_block.note.note < N_TOTAL);
+            assert(edit.new_block.note.octave >= 0 && edit.new_block.note.octave < octaves);
+
+            draw_list->AddRectFilled(
+                {p.x + (block_x * cell_single), p.y + block_y * cell_height},
+                {p.x + ((block_x + note.duration) * cell_single), p.y + (block_y + 1) * cell_height},
+                ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.5f}),
+                rounding
+            );
+
+            //draw_list->AddRect(startpos, endpos, ImGui::GetColorU32(ImGuiCol_Button), rounding);
         }
 
         ImGui::PopStyleVar();
@@ -144,6 +176,17 @@ void test_editor()
 
         ImGui::SetCursorPos(lp);
         ImGui::PopID();
+    }
+
+    if(any_is_editing) {
+        was_editing = true;
+    }
+    else if(!any_is_editing && was_editing) {
+        if(edit.block) {
+            *edit.block = edit.new_block;
+            edit.block = nullptr;
+            was_editing = false;
+        }
     }
 
     ImGui::Dummy(overall_size);
