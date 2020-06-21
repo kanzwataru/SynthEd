@@ -1,6 +1,8 @@
 #include "main_test.h"
 #include <imgui.h>
 #include <cmath>
+#include <cstdio>
+#include <algorithm>
 #include "notes.h"
 
 #define countof(x) sizeof((x)) / sizeof(x[0])
@@ -134,14 +136,34 @@ void test_editor()
 
         ImGui::SetCursorPos(minp);
         ImGui::Button(note_name_table[note.note.note], {maxp.x - minp.x, maxp.y - minp.y});
+
+        const float drag_handle_begin = 0.25f;
+        const float drag_handle_end = 0.85f;
+        if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
+            //TODO: reduce copy-pasta?
+            const ImVec2 mouse_offset = {
+                (io.MousePos.x - ((p.x - lp.x) + minp.x)),
+                (io.MousePos.y - ((p.y - lp.y) + minp.y))
+            };
+
+            const float hover_button_percent = mouse_offset.x / (maxp.x - minp.x);
+
+            if(hover_button_percent >= drag_handle_end || hover_button_percent <= drag_handle_begin) {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+            }
+        }
+
         if(ImGui::IsItemActive()) {
-            const ImVec2 offset = {
+            const ImVec2 mouse_offset = {
                 (io.MouseClickedPos[0].x - ((p.x - lp.x) + minp.x)),
                 (io.MouseClickedPos[0].y - ((p.y - lp.y) + minp.y))
             };
+
+            const float hover_button_percent = mouse_offset.x / (maxp.x - minp.x);
+
             const ImVec2 startpos = {
-                io.MousePos.x - offset.x,
-                io.MousePos.y - offset.y
+                io.MousePos.x - mouse_offset.x,
+                io.MousePos.y - mouse_offset.y
             };
             const ImVec2 endpos = {
                 startpos.x + (note.duration * cell_single),
@@ -151,22 +173,61 @@ void test_editor()
             const int block_x = std::round((startpos.x - p.x) / (cell_single));
             const int block_y = std::round((startpos.y - p.y) / (cell_height));
 
+            //TODO: Clip timing to beg/end of canvas
             any_is_editing = true;
-            edit.block = &note;
-            edit.prev_block = note;
-            edit.new_block = note;
-            edit.new_block.note.note = N_TOTAL - 1 - (block_y % N_TOTAL);
-            edit.new_block.note.octave = octaves - 1 - (block_y / N_TOTAL);
-            edit.new_block.time = block_x;
-            assert(edit.new_block.note.note >= 0 && edit.new_block.note.note < N_TOTAL);
-            assert(edit.new_block.note.octave >= 0 && edit.new_block.note.octave < octaves);
+            if(hover_button_percent < drag_handle_end && hover_button_percent > drag_handle_begin) {
+                if(block_y >= 0 && block_y < notes * octaves) {
+                    edit.block = &note;
+                    edit.prev_block = note;
+                    edit.new_block = note;
+                    edit.new_block.note.note = N_TOTAL - 1 - (block_y % N_TOTAL);
+                    edit.new_block.note.octave = octaves - 1 - (block_y / N_TOTAL);
+                    edit.new_block.time = block_x;
+                    assert(edit.new_block.note.note >= 0 && edit.new_block.note.note < N_TOTAL);
+                    assert(edit.new_block.note.octave >= 0 && edit.new_block.note.octave < octaves);
 
-            draw_list->AddRectFilled(
-                {p.x + (block_x * cell_single), p.y + block_y * cell_height},
-                {p.x + ((block_x + note.duration) * cell_single), p.y + (block_y + 1) * cell_height},
-                ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.5f}),
-                rounding
-            );
+                    draw_list->AddRectFilled(
+                        {p.x + (block_x * cell_single), p.y + block_y * cell_height},
+                        {p.x + ((block_x + note.duration) * cell_single), p.y + (block_y + 1) * cell_height},
+                        ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.5f}),
+                        rounding
+                    );
+                }
+            }
+            else {
+                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+                const ImVec2 delta = ImGui::GetMouseDragDelta();
+                const int note_delta = round(delta.x / cell_single);
+
+                edit.block = &note;
+                edit.prev_block = note;
+                edit.new_block = note;
+                if(hover_button_percent >= drag_handle_end) {
+                    edit.new_block.duration = std::max(1, note.duration + note_delta);
+                }
+                else if(hover_button_percent <= drag_handle_end){
+                    edit.new_block.duration = std::max(1, note.duration - note_delta);
+                    edit.new_block.time = std::max(0, std::min(note.time + note_delta, note.time + note.duration));
+                }
+
+                //TODO: clean up copy-pasta
+                const ImVec2 minp_screen = {
+                    p.x + edit.new_block.time * cell_single,
+                    p.y + (to_note(edit.new_block.note.note) + (N_TOTAL * (octaves - 1 - edit.new_block.note.octave))) * cell_height
+                };
+                const ImVec2 maxp_screen = {
+                    p.x + (edit.new_block.time * cell_single) + (edit.new_block.duration * cell_single),
+                    p.y + (to_note(edit.new_block.note.note) + 1 + (N_TOTAL * (octaves - 1 - edit.new_block.note.octave))) * cell_height
+                };
+
+                draw_list->AddRectFilled(
+                    minp_screen,
+                    maxp_screen,
+                    ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.75f}),
+                    rounding
+                );
+            }
 
             //draw_list->AddRect(startpos, endpos, ImGui::GetColorU32(ImGuiCol_Button), rounding);
         }
