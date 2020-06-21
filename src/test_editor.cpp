@@ -37,6 +37,7 @@ void test_editor()
     const ImU32 grey_col = ImColor(0.25f, 0.25f, 0.25f, 0.5f);
     const ImU32 bold_col = ImColor(0.5f, 0.5f, 0.5f, 0.75f);
     const ImVec2 p = ImGui::GetCursorScreenPos();
+    const ImGuiIO &io = ImGui::GetIO();
 
     // grid
     const int notes = 12;
@@ -96,25 +97,42 @@ void test_editor()
 #ifdef AS_BUTTON
         ImGui::PushID(i); // TODO: global offset table/enums?
 
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, 15.0f);
+        const float rounding = 15.0f;
+        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
         ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.75f, 0.45f, 0.35f, 1.0f}));
         ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImU32(ImColor{0.75f, 0.25f, 0.15f, 1.0f}));
         ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImU32(ImColor{0.95f, 0.55f, 0.45f, 1.0f}));
 
         ImGui::SetCursorPos(minp);
         ImGui::Button(note_name_table[note.note.note], {maxp.x - minp.x, maxp.y - minp.y});
-        ImGui::SetCursorPos(lp);
+        if(ImGui::IsItemActive()) {
+            const ImVec2 offset = {
+                (io.MouseClickedPos[0].x - ((p.x - lp.x) + minp.x)),
+                (io.MouseClickedPos[0].y - ((p.y - lp.y) + minp.y))
+            };
+            const ImVec2 startpos = {
+                io.MousePos.x - offset.x,
+                io.MousePos.y - offset.y
+            };
+            const ImVec2 endpos = {
+                startpos.x + (note.duration * cell_single),
+                startpos.y + (cell_height)
+            };
+
+            draw_list->AddRect(startpos, endpos, ImGui::GetColorU32(ImGuiCol_Button), rounding);
+        }
 
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
 
+        ImGui::SetCursorPos(lp);
         ImGui::PopID();
 #else
         draw_list->AddRectFilled(
             minp,
             maxp,
             ImColor{0.75f, 0.45f, 0.35f, 1.0f},
-            15.0f
+            rounding
         );
         draw_list->AddText(textp, ImColor{0.15f, 0.15f, 0.15f, 0.75f}, note_name_table[note.note.note]);
 #endif
