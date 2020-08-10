@@ -1,9 +1,15 @@
 #include "main_test.h"
+#include "notes.h"
+#include "playback.h"
+
 #include <imgui.h>
+#include <SDL.h>
+
 #include <cmath>
 #include <cstdio>
 #include <algorithm>
-#include "notes.h"
+#include <thread>
+#include <atomic>
 
 #define countof(x) sizeof((x)) / sizeof(x[0])
 
@@ -29,23 +35,162 @@ struct NoteEdit {
     NoteBlock new_block;
 };
 
+/*
 static NoteBlock section_notes[] = {
     {{N_C, 4}, 0, L_WHOLE},
     {{N_A, 4}, 4, L_HALF},
     {{N_B, 7}, 10, L_WHOLE}
 };
+*/
+
+// TEMP test song
+#define X(o, n, l) {{n, o}, 0, l}
+static NoteBlock song[] = {
+    X(3, N_B,  L_EIGT + L_EIGT),
+    X(4, N_CS, L_EIGT),
+    X(4, N_D,  L_EIGT),
+    X(4, N_A,  L_EIGT),
+    X(4, N_FS, L_QUART),
+    X(4, N_FS, L_EIGT),
+    X(4, N_E,  L_SIXT),
+    X(4, N_FS, L_SIXT + L_HALF + L_QUART),
+
+    X(4, N_E,  L_EIGT),
+    X(4, N_FS, L_EIGT),
+    X(4, N_A,  L_EIGT), //
+    X(4, N_FS, L_EIGT),
+    X(4, N_CS, L_EIGT),
+    X(4, N_D,  L_EIGT),
+    X(4, N_CS, L_QUART),
+    X(4, N_CS, L_EIGT),
+    X(3, N_B,  L_SIXT),
+    X(3, N_FS, L_SIXT + L_HALF + L_QUART + L_EIGT),
+
+    X(3, N_B,  L_EIGT + L_EIGT),
+    X(4, N_CS, L_EIGT),
+    X(4, N_D,  L_EIGT),
+    X(4, N_A,  L_EIGT),
+    X(4, N_FS, L_QUART),
+    X(4, N_FS, L_EIGT),
+    X(4, N_E,  L_SIXT),
+    X(4, N_FS, L_SIXT + L_HALF + L_QUART),
+
+    X(4, N_E,  L_EIGT),
+    X(4, N_FS, L_EIGT),
+    X(4, N_A,  L_EIGT), //
+    X(4, N_FS, L_EIGT),
+    X(4, N_A,  L_EIGT),
+    X(5, N_D,  L_EIGT),
+    X(5, N_CS, L_EIGT + L_SIXT),
+    X(4, N_B,  L_EIGT + L_SIXT),
+    X(4, N_FS, L_EIGT + L_QUART + L_EIGT),
+};
+#undef X
 
 static NoteEdit edit = {};
 static bool was_editing = false;
 
 static int to_note(int n) { return (N_TOTAL - 1) - n; }
+static float zoom = 1.0f;
+
+static Instrument instruments[VOICE_COUNT];
+
+static std::thread playback_thread;
+static std::atomic<bool> playing;
+
+//NOTE: assumes notes are sorted by duration
+static void play_song(const NoteBlock *notes, size_t count)
+{
+    if(count == 0)
+        return;
+
+    int playhead = 0;
+    int track_end = notes[count - 1].time + notes[count - 1].duration;
+    const NoteBlock *n = notes;
+
+    while(playing && playhead < track_end && n < (notes + count)) {
+        if(playhead == n->time) {
+            playback_play_note(0, n->note);
+        }
+        else if(playhead == n->time + n->duration) {
+            ++n;
+
+            if(n < (notes + count)) {
+                if(playhead == n->time) {
+                    playback_play_note(0, n->note);
+                }
+                else {
+                    playback_stop(0);
+                }
+            }
+            else {
+                playback_stop(0);
+                break;
+            }
+        }
+
+        //printf("%d %d\n", n->time, n->duration);
+        fflush(stdout);
+
+        SDL_Delay(105);
+        ++playhead;
+    }
+
+    playback_stop(0);
+    playing = false;
+}
+
+static void ui_top_bar()
+{
+    ImGui::SliderFloat("Zoom", &zoom, 0.1f, 6.0f);
+
+    const ImVec2 button_dim = {48.0f, 32.0f};
+    ImGui::Button("|<", button_dim);
+    ImGui::SameLine();
+
+    if(playing) {
+        if(ImGui::Button("||", button_dim)) {
+            playing = false;
+            if(playback_thread.joinable()) {
+                playback_thread.join();
+            }
+            playback_stop(0);
+        }
+    }
+    else {
+        if(ImGui::Button(">", button_dim)) {
+            playing = true;
+            playback_thread = std::thread([](){
+                play_song(song, countof(song));
+            });
+        }
+    }
+    ImGui::SameLine();
+
+    ImGui::Button(">|", button_dim);
+}
+
+void test_editor_init()
+{
+    playback_registers_clear();
+    for(int i = 0; i < VOICE_COUNT; ++i) {
+        playback_instrument_set(instruments[i], i);
+    }
+
+    // TEMP: lay out notes in test song
+    int time = 0;
+    for(auto &block : song) {
+        block.time = time;
+        time += block.duration;
+    }
+}
 
 void test_editor()
 {
-    static float s_zoom = 1.0f;
-
     ImGui::Begin("Editor", nullptr, ImGuiWindowFlags_NoScrollbar);
-    ImGui::SliderFloat("Zoom", &s_zoom, 0.1f, 6.0f);
+
+    ui_top_bar();
+
     ImDrawList *root_draw_list = ImGui::GetWindowDrawList();
 
     const float piano_width = 50.0f;
@@ -62,7 +207,7 @@ void test_editor()
 
     const int whole_note_count = 256;
     const float cell_height = 20.0f;
-    const float cell_width  = 92.0f * s_zoom;
+    const float cell_width  = 92.0f * zoom;
     const float cell_single = cell_width / L_WHOLE;
     const ImVec2 overall_size = {(whole_note_count * cell_width), (notes * octaves) * cell_height};
 
@@ -111,8 +256,8 @@ void test_editor()
 
     // notes
     bool any_is_editing = false;
-    for(size_t i = 0; i < countof(section_notes); ++i) {
-        auto &note = section_notes[i];
+    for(size_t i = 0; i < countof(song); ++i) {
+        auto &note = song[i];
 
         const ImVec2 lp = ImGui::GetCursorPos();
         const float octave_offset = (N_TOTAL * (octaves - 1 - note.note.octave));
@@ -329,4 +474,9 @@ void test_editor()
     root_draw_list->PopClipRect();
 
     ImGui::End();
+
+    // join thread if needed
+    if(!playing && playback_thread.joinable()) {
+        playback_thread.join();
+    }
 }

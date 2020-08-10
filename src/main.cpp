@@ -133,6 +133,7 @@ int main()
 {
     sdl_init();
     ui_init();
+    test_editor_init();
 
     opl.adlib_init(SAMPLE_RATE, true);
 

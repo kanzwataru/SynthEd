@@ -3,61 +3,9 @@
 #include <SDL2/SDL.h>
 #include "main_test.h"
 #include "extern/imgui/imgui.h"
+#include "instrument.h"
 #include "notes.h"
-
-enum Waveform {
-    WAVE_SINE       = 0x00,
-    WAVE_HALF_SINE  = 0x01,
-    WAVE_ABS_SINE   = 0x02,
-    WAVE_PULSE_SINE = 0x03
-};
-
-struct Operator {
-    uint8_t attack;
-    uint8_t decay;
-    uint8_t sustain;
-    uint8_t release;
-    uint8_t volume;
-    int     waveform;
-};
-
-struct Instrument {
-    Operator mod;
-    Operator car;
-
-    Instrument() {
-        mod.attack   = 0x0F;
-        mod.decay    = 0x00;
-        mod.sustain  = 0x07;
-        mod.release  = 0x07;
-        mod.volume   = 0x15;
-        mod.waveform = WAVE_SINE;
-
-        car.attack   = 0x0F;
-        car.decay    = 0x00;
-        car.sustain  = 0x07;
-        car.release  = 0x07;
-        car.volume   = 0x3F;
-        car.waveform = WAVE_SINE;
-    }
-};
-
-#define HZ_TO_FNUM(hz, octave) (uint16_t)((hz) * pow(2, 20.0 - (octave)) / 49716)
-
-static const uint16_t freq_table[N_TOTAL] = {
-    [N_C]    = HZ_TO_FNUM(261.63, 4),
-    [N_CS]    = HZ_TO_FNUM(277.18, 4),
-    [N_D]     = HZ_TO_FNUM(293.66, 4),
-    [N_DS]    = HZ_TO_FNUM(311.13, 4),
-    [N_E]     = HZ_TO_FNUM(329.63, 4),
-    [N_F]     = HZ_TO_FNUM(349.23, 4),
-    [N_FS]    = HZ_TO_FNUM(369.99, 4),
-    [N_G]     = HZ_TO_FNUM(391.99, 4),
-    [N_GS]    = HZ_TO_FNUM(415.31, 4),
-    [N_A]     = HZ_TO_FNUM(440.00, 4),
-    [N_AS]    = HZ_TO_FNUM(466.16, 4),
-    [N_B]     = HZ_TO_FNUM(493.88, 4),
-};
+#include "playback.h"
 
 #define HI(x) (N_TOTAL + (x))
 static int keyboard_table[N_TOTAL * 2] = {
@@ -92,56 +40,6 @@ static bool initialized = false;
 static Instrument instrument;
 
 static Note prev_notes[N_TOTAL];
-static uint8_t reg_b0s[N_TOTAL];
-
-static void registers_clear(void)
-{
-    for(int i = 0x01; i <= 0xF5; ++i) {
-        adlib_out(i, 0);
-    }
-}
-
-static uint8_t register_of(uint8_t addr, uint8_t voice, uint8_t op)
-{
-    static const uint8_t offsets[2][9] = {
-        {0x00, 0x01, 0x02, 0x08, 0x09, 0x0A, 0x10, 0x11, 0x12}, // OP 1
-        {0x03, 0x04, 0x05, 0x0B, 0x0C, 0x0D, 0x13, 0x14, 0x15}  // OP 2
-    };
-
-    return addr + offsets[op][voice];
-}
-
-static void instrument_set(const Instrument &instr, int voice)
-{
-    adlib_out(0x01, 1 << 5);
-    adlib_out(register_of(0x20, voice, 0), 0x01);
-    adlib_out(register_of(0x40, voice, 0), (255 - instr.mod.volume) & ~((1 << 7) | (1 << 6)));
-    adlib_out(register_of(0x60, voice, 0), (instr.mod.attack << 4) | instr.mod.decay);
-    adlib_out(register_of(0x80, voice, 0), (instr.mod.sustain << 4) | instr.mod.release);
-    adlib_out(register_of(0xE0, voice, 0), instr.mod.waveform);
-
-    adlib_out(register_of(0x20, voice, 1), 0x01);
-    adlib_out(register_of(0x40, voice, 1), (255 - instr.car.volume) & ~((1 << 7) | (1 << 6)));
-    adlib_out(register_of(0x60, voice, 1), (instr.car.attack << 4) | instr.car.decay);
-    adlib_out(register_of(0x80, voice, 1), (instr.car.sustain << 4) | instr.car.release);
-    adlib_out(register_of(0xE0, voice, 1), instr.car.waveform);
-}
-
-static void stop(int voice)
-{
-    //adlib_out(0xB0 + voice, 0x00);
-    adlib_out(0xB0 + voice, reg_b0s[voice] & 0x1F);
-}
-
-static void play(int voice, unsigned short octave, unsigned short note)
-{
-    unsigned char lsb = (unsigned char)(0x00FF & note);
-    unsigned char msb = (1 << 5) | ((7 & octave) << 2) | ((0xFF00 & note) >> 8);
-    adlib_out(0xA0 + voice, lsb);
-    adlib_out(0xB0 + voice, msb);
-    reg_b0s[voice] = msb;
-    //printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
-}
 
 static void ui_instrument_operator(Operator &op)
 {
@@ -163,7 +61,7 @@ static void ui_instrument_operator(Operator &op)
 void test_piano()
 {
     if(!initialized) {
-        registers_clear();
+        playback_registers_clear();
         for(int i = 0; i < N_TOTAL; ++i) {
             prev_notes[i].note = -1;
             prev_notes[i].octave = 4;
@@ -173,7 +71,7 @@ void test_piano()
     }
 
     for(int i = 0; i < 9; ++i) {
-        instrument_set(instrument, i);
+        playback_instrument_set(instrument, i);
     }
 
 
@@ -219,10 +117,10 @@ void test_piano()
     for(int i = 0; i < 9; ++i) {
         if(notes[i].note != prev_notes[i].note) {
             if(notes[i].note != -1) {
-                play(i, notes[i].octave, freq_table[notes[i].note]);
+                playback_play_note(i, notes[i]);
             }
             else {
-                stop(i);
+                playback_stop(i);
             }
         }
 

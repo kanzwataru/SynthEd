@@ -7,6 +7,8 @@
 #endif
 
 EXPORT void adlib_out(unsigned short addr, unsigned char val);
+
 EXPORT int  test_play(void);
 EXPORT void test_piano(void);
+EXPORT void test_editor_init(void);
 EXPORT void test_editor(void);
