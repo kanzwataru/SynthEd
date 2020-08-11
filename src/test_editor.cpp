@@ -114,19 +114,17 @@ static size_t find_closest_note(const NoteBlock *notes, size_t count, int time)
         }
     }
 
-    printf("Closest is: %zu", idx);
-
     return idx;
 }
 
 //NOTE: assumes notes are sorted by duration
 static void play_song(const NoteBlock *notes, size_t count)
 {
-    if(count == 0)
-        return;
+    if(count == 0) {
+        playing = false;
+        return;   
+    }
 
-    //playhead = 0;
-    //int playhead = 0;
     int track_end = notes[count - 1].time + notes[count - 1].duration;
     const NoteBlock *n = &notes[find_closest_note(notes, count, playhead)];
 
@@ -416,13 +414,19 @@ void test_editor()
         }
     }
 
+    // playhead
     ImVec2 lp = ImGui::GetCursorPos();
     p = ImGui::GetCursorScreenPos();
 
     ImGui::SetCursorPos({lp.x + (playhead * cell_single), lp.y});
 
     const ImVec2 playhead_dim = {cell_single * L_QUART, overall_size.y};
+
+    ImGui::PushStyleColor(ImGuiCol_Button,        (ImU32)ImColor(0.50f, 0.50f, 0.50f, 0.35f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  (ImU32)ImColor(0.45f, 0.45f, 0.45f, 0.35f));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, (ImU32)ImColor(0.60f, 0.60f, 0.60f, 0.35f));
     ImGui::Button("", playhead_dim);
+    ImGui::PopStyleColor(3);
 
     if(ImGui::IsItemActive() && !ImGui::IsItemHovered()) {
         // needs minp???
