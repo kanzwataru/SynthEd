@@ -418,9 +418,9 @@ void test_editor()
     ImVec2 lp = ImGui::GetCursorPos();
     p = ImGui::GetCursorScreenPos();
 
-    ImGui::SetCursorPos({lp.x + (playhead * cell_single), lp.y});
-
+    const float playhead_offset = (playhead * cell_single);
     const ImVec2 playhead_dim = {cell_single * L_QUART, overall_size.y};
+    ImGui::SetCursorPos({lp.x + playhead_offset, lp.y});
 
     ImGui::PushStyleColor(ImGuiCol_Button,        (ImU32)ImColor(0.50f, 0.50f, 0.50f, 0.35f));
     ImGui::PushStyleColor(ImGuiCol_ButtonActive,  (ImU32)ImColor(0.45f, 0.45f, 0.45f, 0.35f));
@@ -443,6 +443,8 @@ void test_editor()
             ImGui::ResetMouseDragDelta();
         }
     }
+
+    //root_draw_list->AddLine({p.x + playhead_offset, p.y}, {p.x + playhead_offset, p.y + overall_size.y}, (ImU32)ImColor(1.0f, 0.0f, 0.0f, 1.0f), 2.0f);
 
     ImGui::SetCursorPos(lp);
 
