@@ -449,17 +449,20 @@ void test_editor()
     ImGui::SetCursorPos(lp);
 
     ImGui::Dummy(overall_size);
+
+    const float scroll_y = ImGui::GetScrollY();
+
     ImGui::EndChild();
     ImGui::SameLine();
 
     // piano
     root_draw_list->PushClipRect(
         orig_pos_screen,
-        {orig_pos_screen.x + ImGui::GetWindowSize().x, ImGui::GetWindowSize().y},
+        {orig_pos_screen.x + ImGui::GetWindowSize().x, orig_pos_screen.y + ImGui::GetWindowSize().y},
         true
     );
 
-    ImGui::SetCursorPos({orig_pos.x, p.y - cell_height});
+    ImGui::SetCursorPos({orig_pos.x, orig_pos.y - scroll_y + (cell_height / 2) - 1});
     lp = ImGui::GetCursorPos();
     p = ImGui::GetCursorScreenPos();
 
