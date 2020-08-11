@@ -1,0 +1,10 @@
+- time slider/playhead
+- fix positioning for piano roll when editor is torn off
+
+- multi-channel
+- multi-instrument
+- save/load
+- undo/redo
+- multi-selection
+- DOS playback (+ efficient file format)
+

@@ -97,6 +97,27 @@ static Instrument instruments[VOICE_COUNT];
 
 static std::thread playback_thread;
 static std::atomic<bool> playing;
+static std::atomic<int> playhead;
+
+static size_t find_closest_note(const NoteBlock *notes, size_t count, int time)
+{
+    assert(count > 0);
+
+    int delta = time - notes[0].time;
+    size_t idx = 0;
+
+    for(size_t i = 0; i < count; ++i) {
+        int this_delta = time - notes[i].time;
+        if(abs(this_delta) < abs(delta)) {
+            delta = this_delta;
+            idx = i;
+        }
+    }
+
+    printf("Closest is: %zu", idx);
+
+    return idx;
+}
 
 //NOTE: assumes notes are sorted by duration
 static void play_song(const NoteBlock *notes, size_t count)
@@ -104,9 +125,10 @@ static void play_song(const NoteBlock *notes, size_t count)
     if(count == 0)
         return;
 
-    int playhead = 0;
+    //playhead = 0;
+    //int playhead = 0;
     int track_end = notes[count - 1].time + notes[count - 1].duration;
-    const NoteBlock *n = notes;
+    const NoteBlock *n = &notes[find_closest_note(notes, count, playhead)];
 
     while(playing && playhead < track_end && n < (notes + count)) {
         if(playhead == n->time) {
@@ -129,9 +151,6 @@ static void play_song(const NoteBlock *notes, size_t count)
             }
         }
 
-        //printf("%d %d\n", n->time, n->duration);
-        fflush(stdout);
-
         SDL_Delay(105);
         ++playhead;
     }
@@ -145,7 +164,9 @@ static void ui_top_bar()
     ImGui::SliderFloat("Zoom", &zoom, 0.1f, 6.0f);
 
     const ImVec2 button_dim = {48.0f, 32.0f};
-    ImGui::Button("|<", button_dim);
+    if(ImGui::Button("|<", button_dim)) {
+        playhead = 0;
+    }
     ImGui::SameLine();
 
     if(playing) {
@@ -395,6 +416,32 @@ void test_editor()
         }
     }
 
+    ImVec2 lp = ImGui::GetCursorPos();
+    p = ImGui::GetCursorScreenPos();
+
+    ImGui::SetCursorPos({lp.x + (playhead * cell_single), lp.y});
+
+    const ImVec2 playhead_dim = {cell_single * L_QUART, overall_size.y};
+    ImGui::Button("", playhead_dim);
+
+    if(ImGui::IsItemActive() && !ImGui::IsItemHovered()) {
+        // needs minp???
+        const float mouse_offset = io.MousePos.x - ((p.x - lp.x));
+
+        const ImVec2 delta = ImGui::GetMouseDragDelta();
+        if(abs(delta.x) > cell_single) {
+            const int t_next = mouse_offset / cell_single;
+            const int max_time = whole_note_count * L_WHOLE;
+            if(t_next >= 0 && t_next < max_time) {
+                playhead = t_next;
+            }
+
+            ImGui::ResetMouseDragDelta();
+        }
+    }
+
+    ImGui::SetCursorPos(lp);
+
     ImGui::Dummy(overall_size);
     ImGui::EndChild();
     ImGui::SameLine();
@@ -407,7 +454,7 @@ void test_editor()
     );
 
     ImGui::SetCursorPos({orig_pos.x, p.y - cell_height});
-    const ImVec2 lp = ImGui::GetCursorPos();
+    lp = ImGui::GetCursorPos();
     p = ImGui::GetCursorScreenPos();
 
     root_draw_list->AddRectFilled(
