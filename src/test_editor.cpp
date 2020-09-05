@@ -409,11 +409,9 @@ static bool ui_note_add(NoteBlock *note, const UINoteMetrics &metrics, const UIC
     const bool done_adding = adding && io.MouseReleased[0];
 
     if(adding) {
-        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+        ImGui::SetMouseCursor(ImGuiMouseCursor_None);
 
         const ImVec2 lp = ImGui::GetCursorPos();
-
-        note->duration = L_WHOLE;
         auto mouse = calc_mouse_note_coords(note->duration, lp, ui, metrics);
 
         note_from_mouse_pos(note, mouse.block_x, mouse.block_y);
@@ -447,7 +445,7 @@ void test_editor()
     metrics.cell_height = 20.0f;
     metrics.cell_width  = 92.0f * zoom;
     metrics.cell_single = metrics.cell_width / L_WHOLE;
-    metrics.note_rounding = 15.0f; // style stuff, should be in a different struct?
+    metrics.note_rounding = 8.0f; // style stuff, should be in a different struct?
 
     const ImVec2 overall_size = {(metrics.whole_note_count * metrics.cell_width), (note_count * octave_count) * metrics.cell_height};
 
@@ -525,6 +523,8 @@ void test_editor()
 
     // add note
     NoteBlock note_to_add;
+    note_to_add.duration = song.size() > 0 ? song.back().duration : L_WHOLE;
+
     const bool added_note = ui_note_add(&note_to_add, metrics, ui);
     if(added_note) {
         song.push_back(note_to_add);
