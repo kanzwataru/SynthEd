@@ -147,8 +147,8 @@ void test_piano()
     ImGui::PopID();
     ImGui::End();
 
-    printf("\n");
+    //printf("\n");
     for(int i = 0; i < 9; ++i) {
-        printf("%d %d\n", prev_notes[i].note, notes[i].note);
+        //printf("%d %d\n", prev_notes[i].note, notes[i].note);
     }
 }

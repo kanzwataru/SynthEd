@@ -191,7 +191,7 @@ void play(int voice, unsigned short octave, unsigned short note)
     unsigned char msb = (1 << 5) | ((7 & octave) << 2) | ((0xFF00 & note) >> 8);
     output(0xA0 + voice, lsb);
     output(0xB0 + voice, msb);
-    printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
+    //printf("[%d] octave: %u note: %u lsb: 0x%2X msb: 0x%2X\n", voice, octave, note, lsb, msb);
 }
 
 void stop(int voice)

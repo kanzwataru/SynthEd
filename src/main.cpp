@@ -27,7 +27,7 @@ void adlib_out(unsigned short addr, unsigned char val)
 {
     std::lock_guard<std::mutex> lock(audio_mutex);
 
-    printf("%X -> %X\n", addr, val);
+    //printf("%X -> %X\n", addr, val);
     opl.adlib_write(addr, val, 0);
 }
 

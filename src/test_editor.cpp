@@ -10,6 +10,7 @@
 #include <algorithm>
 #include <thread>
 #include <atomic>
+#include <vector>
 
 #define countof(x) sizeof((x)) / sizeof(x[0])
 
@@ -45,7 +46,7 @@ static NoteBlock section_notes[] = {
 
 // TEMP test song
 #define X(o, n, l) {{n, o}, 0, l}
-static NoteBlock song[] = {
+static std::vector<NoteBlock> song = {
     X(3, N_B,  L_EIGT + L_EIGT),
     X(4, N_CS, L_EIGT),
     X(4, N_D,  L_EIGT),
@@ -88,7 +89,7 @@ static NoteBlock song[] = {
 #undef X
 
 static NoteEdit edit = {};
-static bool was_editing = false;
+static bool currently_editing = false;
 
 static int to_note(int n) { return (N_TOTAL - 1) - n; }
 static float zoom = 1.0f;
@@ -98,6 +99,9 @@ static Instrument instruments[VOICE_COUNT];
 static std::thread playback_thread;
 static std::atomic<bool> playing;
 static std::atomic<int> playhead;
+
+static const int note_count = N_TOTAL;
+static const int octave_count = 8;
 
 static size_t find_closest_note(const NoteBlock *notes, size_t count, int time)
 {
@@ -122,7 +126,7 @@ static void play_song(const NoteBlock *notes, size_t count)
 {
     if(count == 0) {
         playing = false;
-        return;   
+        return;
     }
 
     int track_end = notes[count - 1].time + notes[count - 1].duration;
@@ -180,7 +184,7 @@ static void ui_top_bar()
         if(ImGui::Button(">", button_dim)) {
             playing = true;
             playback_thread = std::thread([](){
-                play_song(song, countof(song));
+                play_song(song.data(), song.size());
             });
         }
     }
@@ -204,6 +208,223 @@ void test_editor_init()
     }
 }
 
+struct UINoteMetrics {
+    int whole_note_count;
+    float cell_height;
+    float cell_width;
+    float cell_single;
+
+    //TODO: should style not be in a seperate struct?
+    float note_rounding;
+};
+
+struct UINoteMouseCoords {
+    ImVec2 offset;
+    float button_percent;
+
+    ImVec2 startpos;
+    ImVec2 endpos;
+    int block_x;
+    int block_y;
+};
+
+struct UICtx {
+    ImVec2 p; // cursor
+    ImDrawList *draw_list;
+};
+
+static UINoteMouseCoords calc_mouse_note_coords(int duration, const ImVec2 &lp, const UICtx &ui, const UINoteMetrics &metrics, const ImVec2 &minp = {0.0f, 0.0f}, const ImVec2 &maxp = {0.0f, 0.0f})
+{
+    ImGuiIO &io = ImGui::GetIO();
+    UINoteMouseCoords mouse;
+
+    const float delta = maxp.x - minp.x;
+
+    if(std::abs(delta) > 0.001f) {
+        mouse.offset = {
+            (io.MouseClickedPos[0].x - ((ui.p.x - lp.x) + minp.x)),
+            (io.MouseClickedPos[0].y - ((ui.p.y - lp.y) + minp.y))
+        };
+        mouse.button_percent = mouse.offset.x / (maxp.x - minp.x);
+    }
+    else {
+        // this isn't quite the same behaviour though...
+        mouse.offset = {0.0f, 0.0f};
+        mouse.button_percent = 0.0f;
+    }
+
+    mouse.startpos = {
+        io.MousePos.x - mouse.offset.x,
+        io.MousePos.y - mouse.offset.y
+    };
+    mouse.endpos = {
+        mouse.startpos.x + (duration * metrics.cell_single),
+        mouse.startpos.y + (metrics.cell_height)
+    };
+
+    mouse.block_x = std::round((mouse.startpos.x - ui.p.x) / (metrics.cell_single));
+    mouse.block_y = std::round((mouse.startpos.y - ui.p.y) / (metrics.cell_height));
+
+    return mouse;
+}
+
+static void note_from_mouse_pos(NoteBlock *note, int block_x, int block_y)
+{
+    note->note.note = N_TOTAL - 1 - (block_y % N_TOTAL);
+    note->note.octave = octave_count - 1 - (block_y / N_TOTAL);
+    note->time = block_x;
+    assert(note->note.note >= 0 && note->note.note < N_TOTAL);
+    assert(note->note.octave >= 0 && note->note.octave < octave_count);
+}
+
+static void calc_note_extents(ImVec2 &minp, ImVec2 &maxp, const NoteBlock &note, const ImVec2 &lp, const UINoteMetrics &metrics)
+{
+    const float octave_offset = (N_TOTAL * (octave_count - 1 - note.note.octave));
+
+    minp = {
+        lp.x + note.time * metrics.cell_single,
+        lp.y + (to_note(note.note.note) + octave_offset) * metrics.cell_height
+    };
+    maxp = {
+        lp.x + (note.time * metrics.cell_single) + (note.duration * metrics.cell_single),
+        lp.y + (to_note(note.note.note) + 1 + octave_offset) * metrics.cell_height
+    };
+}
+
+static void draw_note_drag(float duration, const UINoteMouseCoords &mouse, const UICtx &ui, const UINoteMetrics &metrics)
+{
+    ui.draw_list->AddRectFilled(
+        {ui.p.x + (mouse.block_x * metrics.cell_single), ui.p.y + mouse.block_y * metrics.cell_height},
+        {ui.p.x + ((mouse.block_x + duration) * metrics.cell_single), ui.p.y + (mouse.block_y + 1) * metrics.cell_height},
+        ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.5f}),
+        metrics.note_rounding
+    );
+}
+
+//TODO: Clip timing to beg/end of canvas
+static inline bool is_in_song_extents(int block_x, int block_y)
+{
+    return block_y >= 0 && block_y < note_count * octave_count;
+}
+
+static bool ui_note_with_edit(NoteBlock *note, const UINoteMetrics &metrics, const UICtx &ui)
+{
+    ImGuiIO &io = ImGui::GetIO();
+
+    bool edited = false; // return value
+
+    // compute extents for box
+    const ImVec2 lp = ImGui::GetCursorPos();
+    ImVec2 minp, maxp;
+    calc_note_extents(minp, maxp, *note, lp, metrics);
+
+    // style
+    ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, metrics.note_rounding);
+    ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.75f, 0.45f, 0.35f, 1.0f}));
+    ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImU32(ImColor{0.75f, 0.25f, 0.15f, 1.0f}));
+    ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImU32(ImColor{0.95f, 0.55f, 0.45f, 1.0f}));
+
+    ImGui::SetCursorPos(minp);
+    ImGui::Button(note_name_table[note->note.note], {maxp.x - minp.x, maxp.y - minp.y});
+
+    // set mouse cursor for resizing
+    const float drag_handle_begin = 0.25f;
+    const float drag_handle_end = 0.85f;
+    if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
+        UINoteMouseCoords mouse = calc_mouse_note_coords(0, lp, ui, metrics, minp, maxp);
+
+        if(mouse.button_percent >= drag_handle_end || mouse.button_percent <= drag_handle_begin) {
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+        }
+    }
+
+    // drag for EITHER move or resize
+    if(ImGui::IsItemActive()) {
+        UINoteMouseCoords mouse = calc_mouse_note_coords(note->duration, lp, ui, metrics, minp, maxp);
+
+        edited = true;
+
+        const bool should_move = mouse.button_percent > drag_handle_begin && mouse.button_percent < drag_handle_end;
+        if(should_move) {
+            // move note
+            if(is_in_song_extents(mouse.block_x, mouse.block_y)) {
+                edit.block = note;
+                edit.prev_block = *note;
+                edit.new_block = *note;
+
+                note_from_mouse_pos(&edit.new_block, mouse.block_x, mouse.block_y);
+                draw_note_drag(note->duration, mouse, ui, metrics);
+            }
+        }
+        else {
+            // resize note
+            ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
+
+            const ImVec2 delta = ImGui::GetMouseDragDelta();
+            const int note_delta = round(delta.x / metrics.cell_single);
+
+            edit.block = note;
+            edit.prev_block = *note;
+            edit.new_block = *note;
+            if(mouse.button_percent >= drag_handle_end) {
+                edit.new_block.duration = std::max(1, note->duration + note_delta);
+            }
+            else if(mouse.button_percent <= drag_handle_end){
+                edit.new_block.duration = std::max(1, note->duration - note_delta);
+                edit.new_block.time = std::max(0, std::min(note->time + note_delta, note->time + note->duration));
+            }
+
+            //TODO: clean up copy-pasta
+            const ImVec2 minp_screen = {
+                ui.p.x + edit.new_block.time * metrics.cell_single,
+                ui.p.y + (to_note(edit.new_block.note.note) + (N_TOTAL * (octave_count - 1 - edit.new_block.note.octave))) * metrics.cell_height
+            };
+            const ImVec2 maxp_screen = {
+                ui.p.x + (edit.new_block.time * metrics.cell_single) + (edit.new_block.duration * metrics.cell_single),
+                ui.p.y + (to_note(edit.new_block.note.note) + 1 + (N_TOTAL * (octave_count - 1 - edit.new_block.note.octave))) * metrics.cell_height
+            };
+
+            ui.draw_list->AddRectFilled(
+                minp_screen,
+                maxp_screen,
+                ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.75f}),
+                metrics.note_rounding
+            );
+        }
+    }
+
+    ImGui::SetCursorPos(lp);
+
+    ImGui::PopStyleVar();
+    ImGui::PopStyleColor(3);
+
+    return edited;
+}
+
+static bool ui_note_add(NoteBlock *note, const UINoteMetrics &metrics, const UICtx &ui)
+{
+    ImGuiIO &io = ImGui::GetIO();
+
+    const bool adding = io.KeyCtrl;;
+    const bool done_adding = adding && io.MouseReleased[0];
+
+    if(adding) {
+        ImGui::SetMouseCursor(ImGuiMouseCursor_Hand);
+
+        const ImVec2 lp = ImGui::GetCursorPos();
+
+        note->duration = L_WHOLE;
+        auto mouse = calc_mouse_note_coords(note->duration, lp, ui, metrics);
+
+        note_from_mouse_pos(note, mouse.block_x, mouse.block_y);
+        draw_note_drag(note->duration, mouse, ui, metrics);
+
+        return done_adding;
+    }
+
+    return false;
+}
+
 void test_editor()
 {
     ImGui::Begin("Editor", nullptr, ImGuiWindowFlags_NoScrollbar);
@@ -221,37 +442,39 @@ void test_editor()
     const ImVec2 orig_pos = ImGui::GetCursorPos();
     const ImVec2 orig_pos_screen = ImGui::GetCursorScreenPos();
 
-    const int notes = N_TOTAL;
-    const int octaves = 8;
+    UINoteMetrics metrics;
+    metrics.whole_note_count = 256;
+    metrics.cell_height = 20.0f;
+    metrics.cell_width  = 92.0f * zoom;
+    metrics.cell_single = metrics.cell_width / L_WHOLE;
+    metrics.note_rounding = 15.0f; // style stuff, should be in a different struct?
 
-    const int whole_note_count = 256;
-    const float cell_height = 20.0f;
-    const float cell_width  = 92.0f * zoom;
-    const float cell_single = cell_width / L_WHOLE;
-    const ImVec2 overall_size = {(whole_note_count * cell_width), (notes * octaves) * cell_height};
+    const ImVec2 overall_size = {(metrics.whole_note_count * metrics.cell_width), (note_count * octave_count) * metrics.cell_height};
 
     ImGui::SetCursorPos({orig_pos.x + piano_width, orig_pos.y});
 
     // * grid
     ImGui::BeginChild("EditorArea", {0, 0}, true, ImGuiWindowFlags_HorizontalScrollbar);
-    ImDrawList *draw_list = ImGui::GetWindowDrawList();
-    ImVec2 p = ImGui::GetCursorScreenPos();
+
+    UICtx ui;
+    ui.draw_list = ImGui::GetWindowDrawList();
+    ui.p = ImGui::GetCursorScreenPos();
 
     // background fill
-    for(int note = 0; note < notes; ++note) {
-        for(int octave = 0; octave < octaves; ++octave) {
-            int y = note + (notes * octave);
+    for(int note = 0; note < note_count; ++note) {
+        for(int octave = 0; octave < octave_count; ++octave) {
+            int y = note + (note_count * octave);
 
-            draw_list->AddLine(
-                {p.x + 0, p.y + y * cell_height},
-                {p.x + whole_note_count * cell_width, p.y + y * cell_height},
+            ui.draw_list->AddLine(
+                {ui.p.x + 0, ui.p.y + y * metrics.cell_height},
+                {ui.p.x + metrics.whole_note_count * metrics.cell_width, ui.p.y + y * metrics.cell_height},
                 grey_col
             );
 
             if(note_key_type_table[to_note(note)] == KEY_WHITE) {
-                draw_list->AddRectFilled(
-                    {p.x + 0, p.y + y * cell_height},
-                    {p.x + whole_note_count * cell_width, p.y + (y + 1) * cell_height},
+                ui.draw_list->AddRectFilled(
+                    {ui.p.x + 0, ui.p.y + y * metrics.cell_height},
+                    {ui.p.x + metrics.whole_note_count * metrics.cell_width, ui.p.y + (y + 1) * metrics.cell_height},
                     white_key_bg_col
                 );
             }
@@ -259,176 +482,60 @@ void test_editor()
     }
 
     // minor lines
-    for(int x = 0; x < whole_note_count; ++x) {
-        draw_list->AddLine(
-            {p.x + x * cell_width, p.y + 0},
-            {p.x + x * cell_width, p.y + (notes * octaves * cell_height)},
+    for(int x = 0; x < metrics.whole_note_count; ++x) {
+        ui.draw_list->AddLine(
+            {ui.p.x + x * metrics.cell_width, ui.p.y + 0},
+            {ui.p.x + x * metrics.cell_width, ui.p.y + (note_count * octave_count * metrics.cell_height)},
             bold_col
         );
     }
 
     // major lines
-    for(int x = 0; x < whole_note_count * 4; ++x) {
-        draw_list->AddLine(
-            {p.x + x * cell_width / 4, p.y + 0},
-            {p.x + x * cell_width / 4, p.y + (notes * octaves * cell_height)},
+    for(int x = 0; x < metrics.whole_note_count * 4; ++x) {
+        ui.draw_list->AddLine(
+            {ui.p.x + x * metrics.cell_width / 4, ui.p.y + 0},
+            {ui.p.x + x * metrics.cell_width / 4, ui.p.y + (note_count * octave_count * metrics.cell_height)},
             grey_col
         );
     }
 
     // * notes
+    // show notes and allow editing
     bool any_is_editing = false;
-    for(size_t i = 0; i < countof(song); ++i) {
-        auto &note = song[i];
+    for(size_t i = 0; i < song.size(); ++i) {
+        ImGui::PushID(5000 + i); // TODO: global offset table/enums? Is this even necessary?
 
-        // compute extents for box
-        const ImVec2 lp = ImGui::GetCursorPos();
-        const float octave_offset = (N_TOTAL * (octaves - 1 - note.note.octave));
-        const ImVec2 minp = {
-            lp.x + note.time * cell_single,
-            lp.y + (to_note(note.note.note) + octave_offset) * cell_height
-        };
-        const ImVec2 maxp = {
-            lp.x + (note.time * cell_single) + (note.duration * cell_single),
-            lp.y + (to_note(note.note.note) + 1 + octave_offset) * cell_height
-        };
-
-        ImGui::PushID(5000 + i); // TODO: global offset table/enums?
-
-        // style
-        const float rounding = 15.0f;
-        ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
-        ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.75f, 0.45f, 0.35f, 1.0f}));
-        ImGui::PushStyleColor(ImGuiCol_ButtonActive,  ImU32(ImColor{0.75f, 0.25f, 0.15f, 1.0f}));
-        ImGui::PushStyleColor(ImGuiCol_ButtonHovered, ImU32(ImColor{0.95f, 0.55f, 0.45f, 1.0f}));
-
-        ImGui::SetCursorPos(minp);
-        ImGui::Button(note_name_table[note.note.note], {maxp.x - minp.x, maxp.y - minp.y});
-
-        // set mouse cursor for resizing
-        const float drag_handle_begin = 0.25f;
-        const float drag_handle_end = 0.85f;
-        if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
-            //TODO: reduce copy-pasta?
-            const ImVec2 mouse_offset = {
-                (io.MousePos.x - ((p.x - lp.x) + minp.x)),
-                (io.MousePos.y - ((p.y - lp.y) + minp.y))
-            };
-
-            const float hover_button_percent = mouse_offset.x / (maxp.x - minp.x);
-
-            if(hover_button_percent >= drag_handle_end || hover_button_percent <= drag_handle_begin) {
-                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-            }
-        }
-
-        // drag for EITHER move or resize
-        if(ImGui::IsItemActive()) {
-            const ImVec2 mouse_offset = {
-                (io.MouseClickedPos[0].x - ((p.x - lp.x) + minp.x)),
-                (io.MouseClickedPos[0].y - ((p.y - lp.y) + minp.y))
-            };
-
-            const float hover_button_percent = mouse_offset.x / (maxp.x - minp.x);
-
-            const ImVec2 startpos = {
-                io.MousePos.x - mouse_offset.x,
-                io.MousePos.y - mouse_offset.y
-            };
-            const ImVec2 endpos = {
-                startpos.x + (note.duration * cell_single),
-                startpos.y + (cell_height)
-            };
-
-            const int block_x = std::round((startpos.x - p.x) / (cell_single));
-            const int block_y = std::round((startpos.y - p.y) / (cell_height));
-
-            any_is_editing = true;
-
-            //TODO: Clip timing to beg/end of canvas
-            const bool is_in_middle = hover_button_percent > drag_handle_begin && hover_button_percent < drag_handle_end;
-            if(is_in_middle) {
-                // move note
-                if(block_y >= 0 && block_y < notes * octaves) {
-                    edit.block = &note;
-                    edit.prev_block = note;
-                    edit.new_block = note;
-                    edit.new_block.note.note = N_TOTAL - 1 - (block_y % N_TOTAL);
-                    edit.new_block.note.octave = octaves - 1 - (block_y / N_TOTAL);
-                    edit.new_block.time = block_x;
-                    assert(edit.new_block.note.note >= 0 && edit.new_block.note.note < N_TOTAL);
-                    assert(edit.new_block.note.octave >= 0 && edit.new_block.note.octave < octaves);
-
-                    draw_list->AddRectFilled(
-                        {p.x + (block_x * cell_single), p.y + block_y * cell_height},
-                        {p.x + ((block_x + note.duration) * cell_single), p.y + (block_y + 1) * cell_height},
-                        ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.5f}),
-                        rounding
-                    );
-                }
-            }
-            else {
-                // resize note
-                ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
-
-                const ImVec2 delta = ImGui::GetMouseDragDelta();
-                const int note_delta = round(delta.x / cell_single);
-
-                edit.block = &note;
-                edit.prev_block = note;
-                edit.new_block = note;
-                if(hover_button_percent >= drag_handle_end) {
-                    edit.new_block.duration = std::max(1, note.duration + note_delta);
-                }
-                else if(hover_button_percent <= drag_handle_end){
-                    edit.new_block.duration = std::max(1, note.duration - note_delta);
-                    edit.new_block.time = std::max(0, std::min(note.time + note_delta, note.time + note.duration));
-                }
-
-                //TODO: clean up copy-pasta
-                const ImVec2 minp_screen = {
-                    p.x + edit.new_block.time * cell_single,
-                    p.y + (to_note(edit.new_block.note.note) + (N_TOTAL * (octaves - 1 - edit.new_block.note.octave))) * cell_height
-                };
-                const ImVec2 maxp_screen = {
-                    p.x + (edit.new_block.time * cell_single) + (edit.new_block.duration * cell_single),
-                    p.y + (to_note(edit.new_block.note.note) + 1 + (N_TOTAL * (octaves - 1 - edit.new_block.note.octave))) * cell_height
-                };
-
-                draw_list->AddRectFilled(
-                    minp_screen,
-                    maxp_screen,
-                    ImU32(ImColor{0.35f, 0.35f, 0.35f, 0.75f}),
-                    rounding
-                );
-            }
-        }
+        const bool edited = ui_note_with_edit(&song[i], metrics, ui);
+        any_is_editing = edited ? true : any_is_editing;
 
         // cleanup
-        ImGui::PopStyleVar();
-        ImGui::PopStyleColor(3);
-
-        ImGui::SetCursorPos(lp);
         ImGui::PopID();
     }
 
     if(any_is_editing) {
-        was_editing = true;
+        currently_editing = true;
     }
-    else if(!any_is_editing && was_editing) {
+    else if(!any_is_editing && currently_editing) {
         if(edit.block) {
             *edit.block = edit.new_block;
             edit.block = nullptr;
-            was_editing = false;
+            currently_editing = false;
         }
+    }
+
+    // add note
+    NoteBlock note_to_add;
+    const bool added_note = ui_note_add(&note_to_add, metrics, ui);
+    if(added_note) {
+        song.push_back(note_to_add);
     }
 
     // * playhead
     ImVec2 lp = ImGui::GetCursorPos();
-    p = ImGui::GetCursorScreenPos();
+    ui.p = ImGui::GetCursorScreenPos();
 
-    const float playhead_offset = (playhead * cell_single);
-    const ImVec2 playhead_dim = {cell_single * L_QUART, overall_size.y};
+    const float playhead_offset = (playhead * metrics.cell_single);
+    const ImVec2 playhead_dim = {metrics.cell_single * L_QUART, overall_size.y};
     ImGui::SetCursorPos({lp.x + playhead_offset, lp.y});
 
     ImGui::PushStyleColor(ImGuiCol_Button,        (ImU32)ImColor(0.50f, 0.50f, 0.50f, 0.35f));
@@ -439,12 +546,12 @@ void test_editor()
 
     if(ImGui::IsItemActive() && !ImGui::IsItemHovered()) {
         // needs minp???
-        const float mouse_offset = io.MousePos.x - ((p.x - lp.x));
+        const float mouse_offset = io.MousePos.x - ((ui.p.x - lp.x));
 
         const ImVec2 delta = ImGui::GetMouseDragDelta();
-        if(abs(delta.x) > cell_single) {
-            const int t_next = mouse_offset / cell_single;
-            const int max_time = whole_note_count * L_WHOLE;
+        if(abs(delta.x) > metrics.cell_single) {
+            const int t_next = mouse_offset / metrics.cell_single;
+            const int max_time = metrics.whole_note_count * L_WHOLE;
             if(t_next >= 0 && t_next < max_time) {
                 playhead = t_next;
             }
@@ -471,25 +578,25 @@ void test_editor()
         true
     );
 
-    ImGui::SetCursorPos({orig_pos.x, orig_pos.y - scroll_y + (cell_height / 2) - 1});
+    ImGui::SetCursorPos({orig_pos.x, orig_pos.y - scroll_y + (metrics.cell_height / 2) - 1});
     lp = ImGui::GetCursorPos();
-    p = ImGui::GetCursorScreenPos();
+    ui.p = ImGui::GetCursorScreenPos();
 
     root_draw_list->AddRectFilled(
-        p,
-        {p.x + piano_width, p.y + overall_size.y},
+        ui.p,
+        {ui.p.x + piano_width, ui.p.y + overall_size.y},
         ImU32(ImColor{0.65f, 0.65f, 0.65f, 1.0f})
     );
 
-    for(int note = 0; note < notes; ++note) {
-        for(int octave = 0; octave < octaves; ++octave) {
-            int y = note + (notes * octave);
+    for(int note = 0; note < note_count; ++note) {
+        for(int octave = 0; octave < octave_count; ++octave) {
+            int y = note + (note_count * octave);
 
             const char *note_name = note_name_table[to_note(note)];
             char str[5];
             if(to_note(note) == N_C) {
                 assert(octave < 10);
-                str[0] = '0' + (octaves - 1 - octave);
+                str[0] = '0' + (octave_count - 1 - octave);
             }
             else {
                 str[0] = ' ';
@@ -509,7 +616,7 @@ void test_editor()
 
             // TODO: Maybe need to do PushID???
             ImGui::PushID(y);
-            ImGui::SetCursorPos({lp.x, lp.y + (y * cell_height)});
+            ImGui::SetCursorPos({lp.x, lp.y + (y * metrics.cell_height)});
             float width = piano_width;
 
             ImGui::PushStyleVar(ImGuiStyleVar_ButtonTextAlign, {0.0f, 0.5f});
@@ -528,7 +635,7 @@ void test_editor()
                 ImGui::PushStyleColor(ImGuiCol_Text,          ImU32(ImColor{0.95f, 0.95f, 0.95f, 1.0f}));
             }
 
-            ImGui::Button(str, {width, cell_height});
+            ImGui::Button(str, {width, metrics.cell_height});
 
             ImGui::PopStyleColor(4);
             ImGui::PopStyleVar(2);
