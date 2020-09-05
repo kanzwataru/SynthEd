@@ -232,11 +232,12 @@ void test_editor()
 
     ImGui::SetCursorPos({orig_pos.x + piano_width, orig_pos.y});
 
-    // grid
+    // * grid
     ImGui::BeginChild("EditorArea", {0, 0}, true, ImGuiWindowFlags_HorizontalScrollbar);
     ImDrawList *draw_list = ImGui::GetWindowDrawList();
     ImVec2 p = ImGui::GetCursorScreenPos();
 
+    // background fill
     for(int note = 0; note < notes; ++note) {
         for(int octave = 0; octave < octaves; ++octave) {
             int y = note + (notes * octave);
@@ -257,6 +258,7 @@ void test_editor()
         }
     }
 
+    // minor lines
     for(int x = 0; x < whole_note_count; ++x) {
         draw_list->AddLine(
             {p.x + x * cell_width, p.y + 0},
@@ -265,6 +267,7 @@ void test_editor()
         );
     }
 
+    // major lines
     for(int x = 0; x < whole_note_count * 4; ++x) {
         draw_list->AddLine(
             {p.x + x * cell_width / 4, p.y + 0},
@@ -273,11 +276,12 @@ void test_editor()
         );
     }
 
-    // notes
+    // * notes
     bool any_is_editing = false;
     for(size_t i = 0; i < countof(song); ++i) {
         auto &note = song[i];
 
+        // compute extents for box
         const ImVec2 lp = ImGui::GetCursorPos();
         const float octave_offset = (N_TOTAL * (octaves - 1 - note.note.octave));
         const ImVec2 minp = {
@@ -288,10 +292,10 @@ void test_editor()
             lp.x + (note.time * cell_single) + (note.duration * cell_single),
             lp.y + (to_note(note.note.note) + 1 + octave_offset) * cell_height
         };
-        //const ImVec2 textp = {minp.x + 4, minp.y + 4};
 
         ImGui::PushID(5000 + i); // TODO: global offset table/enums?
 
+        // style
         const float rounding = 15.0f;
         ImGui::PushStyleVar(ImGuiStyleVar_FrameRounding, rounding);
         ImGui::PushStyleColor(ImGuiCol_Button,        ImU32(ImColor{0.75f, 0.45f, 0.35f, 1.0f}));
@@ -301,6 +305,7 @@ void test_editor()
         ImGui::SetCursorPos(minp);
         ImGui::Button(note_name_table[note.note.note], {maxp.x - minp.x, maxp.y - minp.y});
 
+        // set mouse cursor for resizing
         const float drag_handle_begin = 0.25f;
         const float drag_handle_end = 0.85f;
         if(ImGui::IsItemHovered() && !ImGui::IsItemActive()) {
@@ -317,6 +322,7 @@ void test_editor()
             }
         }
 
+        // drag for EITHER move or resize
         if(ImGui::IsItemActive()) {
             const ImVec2 mouse_offset = {
                 (io.MouseClickedPos[0].x - ((p.x - lp.x) + minp.x)),
@@ -337,9 +343,12 @@ void test_editor()
             const int block_x = std::round((startpos.x - p.x) / (cell_single));
             const int block_y = std::round((startpos.y - p.y) / (cell_height));
 
-            //TODO: Clip timing to beg/end of canvas
             any_is_editing = true;
-            if(hover_button_percent < drag_handle_end && hover_button_percent > drag_handle_begin) {
+
+            //TODO: Clip timing to beg/end of canvas
+            const bool is_in_middle = hover_button_percent > drag_handle_begin && hover_button_percent < drag_handle_end;
+            if(is_in_middle) {
+                // move note
                 if(block_y >= 0 && block_y < notes * octaves) {
                     edit.block = &note;
                     edit.prev_block = note;
@@ -359,6 +368,7 @@ void test_editor()
                 }
             }
             else {
+                // resize note
                 ImGui::SetMouseCursor(ImGuiMouseCursor_ResizeEW);
 
                 const ImVec2 delta = ImGui::GetMouseDragDelta();
@@ -392,10 +402,9 @@ void test_editor()
                     rounding
                 );
             }
-
-            //draw_list->AddRect(startpos, endpos, ImGui::GetColorU32(ImGuiCol_Button), rounding);
         }
 
+        // cleanup
         ImGui::PopStyleVar();
         ImGui::PopStyleColor(3);
 
@@ -414,7 +423,7 @@ void test_editor()
         }
     }
 
-    // playhead
+    // * playhead
     ImVec2 lp = ImGui::GetCursorPos();
     p = ImGui::GetCursorScreenPos();
 
@@ -455,7 +464,7 @@ void test_editor()
     ImGui::EndChild();
     ImGui::SameLine();
 
-    // piano
+    // * piano
     root_draw_list->PushClipRect(
         orig_pos_screen,
         {orig_pos_screen.x + ImGui::GetWindowSize().x, orig_pos_screen.y + ImGui::GetWindowSize().y},
@@ -531,7 +540,7 @@ void test_editor()
 
     ImGui::End();
 
-    // join thread if needed
+    // * join thread if needed
     if(!playing && playback_thread.joinable()) {
         playback_thread.join();
     }
