@@ -121,13 +121,24 @@ static size_t find_closest_note(const NoteBlock *notes, size_t count, int time)
     return idx;
 }
 
-//NOTE: assumes notes are sorted by duration
+static inline bool operator<(const NoteBlock &lhs, const NoteBlock &rhs)
+{
+    return lhs.time < rhs.time;
+}
+
 static void play_song(const NoteBlock *notes, size_t count)
 {
     if(count == 0) {
         playing = false;
         return;
     }
+
+    //TODO: make this less awkward and don't use STL maybe?
+    std::vector<NoteBlock> sorted;
+    sorted.resize(count);
+    memcpy(sorted.data(), notes, count * sizeof(*notes));
+    std::sort(sorted.begin(), sorted.end());
+    notes = sorted.data();
 
     int track_end = notes[count - 1].time + notes[count - 1].duration;
     const NoteBlock *n = &notes[find_closest_note(notes, count, playhead)];
